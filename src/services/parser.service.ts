@@ -54,19 +54,41 @@ function stripFrontmatter(content: string): string {
 }
 
 /**
- * Matches a `<VK-Hint>` variable token, where `Hint` starts with a letter.
+ * Matches a `<VK-Hint>` variable token — **opening or closing form** — where
+ * `Hint` starts with a letter. Both forms name the *same* variable.
+ *
+ * The closing form exists for markdown-native payloads (flags, §7): unfenced,
+ * `<VK-repo>` is a legal HTML open tag, so Obsidian renders it as an unclosed
+ * custom element that swallows every block below it. Writing
+ * `<VK-repo></VK-repo>` (or a lone `</VK-repo>`) leaves nothing open, so the
+ * note renders — and both spellings resolve to the one variable.
  *
  * Exported so `render.service.ts` highlights exactly the tokens this parser
- * detects — the two drifted apart as separate literals before Phase 1.
+ * detects — the two drifted apart as separate literals before Phase 1. The
+ * webview's `vkWrap` copy (client JS cannot import) is bound to this by
+ * `test/webview-snippets.test.ts`.
  *
  * **Carries the `/g` flag**, so it holds `lastIndex` state. Only use it with
  * `matchAll` or `replace`/`replaceAll`, which reset `lastIndex` themselves;
  * never with a bare `.test()` or `.exec()` loop.
  *
  * @example
- * 'x = <VK-host>'.replaceAll(VK_TOKEN_RE, 'v')  // → 'x = v'
+ * 'x = <VK-host>'.replaceAll(VK_TOKEN_RE, 'v')   // → 'x = v'
+ * 'x = </VK-host>'.replaceAll(VK_TOKEN_RE, 'v')  // → 'x = v'
  */
-export const VK_TOKEN_RE = /<VK-([A-Za-z]\w*)>/g;
+export const VK_TOKEN_RE = /<\/?VK-([A-Za-z]\w*)>/g;
+
+/**
+ * Matches an **adjacent** `<VK-Hint></VK-Hint>` pair — the render-safe spelling
+ * of a single token, collapsed to one value by `resolveVars`.
+ *
+ * The backreference is what keeps it a pair: `<VK-a></VK-b>` is two separate
+ * tokens and is left to the per-token pass.
+ *
+ * @example
+ * '<VK-host></VK-host>'.replaceAll(VK_PAIR_RE, 'v') // → 'v'
+ */
+const VK_PAIR_RE = /<VK-([A-Za-z]\w*)><\/VK-\1>/g;
 
 /**
  * Extracts and parses the YAML frontmatter block from raw vault file content.
@@ -241,6 +263,12 @@ export function extractVars(code: string): ParsedVar[] {
  * unchanged so partial substitution is safe. Non-VK syntax — HTML tags, TypeScript
  * generics, template literals, Handlebars — is never touched.
  *
+ * **Two passes, because both spellings mean one variable.** An adjacent
+ * `<VK-x></VK-x>` pair is the render-safe way to write a token in a
+ * markdown-native payload, so it collapses to the value **once**; the per-token
+ * pass then handles every remaining opening *or* closing tag. Reversing the
+ * order would emit the value twice for a pair.
+ *
  * @param code - String potentially containing `<VK-hint>` tokens.
  * @param vars - Map of full token name (e.g. `'VK-host'`) to replacement value.
  * @returns The string with all resolvable tokens substituted.
@@ -250,12 +278,18 @@ export function extractVars(code: string): ParsedVar[] {
  *
  * @example
  * resolveVars('<VK-known> <VK-unknown>', { 'VK-known': 'hi' })
+ *
+ * @example
+ * resolveVars('run <VK-host></VK-host>', { 'VK-host': 'db' }) // → 'run db' (not 'db db')
  */
 export function resolveVars(code: string, vars: Record<string, string>): string {
-    return code.replaceAll(VK_TOKEN_RE, (match, hint: string) => {
+    const substitute = (match: string, hint: string): string => {
         const key = `VK-${hint}`;
         return key in vars ? vars[key] : match;
-    });
+    };
+    return code
+        .replaceAll(VK_PAIR_RE, substitute)
+        .replaceAll(VK_TOKEN_RE, substitute);
 }
 
 /**

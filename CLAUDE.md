@@ -9,7 +9,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (636 passing)
+npm run test           # Compile + lint + run all tests (659 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -86,7 +86,7 @@ src/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
 │   └── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 636 tests. fixtures/ + snapshots/
+test/                                 # 659 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
 └── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
@@ -126,7 +126,7 @@ regression this list exists to prevent; each is held by a named guard test.
 | HTML escaping | `utils/html.ts` — `escHtml` (all five of `&<>"'`) | `webview-snippets.test.ts` — webview `esc` must match it |
 | Webview `esc`/`lbl` | `artifactPicker/webviewSnippets.ts` — `WEBVIEW_ESC_LBL_JS` | `webview-snippets.test.ts` — defined exactly once per bundle |
 | Slugs | `filename.service.ts` — `slugify` | `filename.service.test.ts` |
-| `<VK-xxx>` regex | `parser.service.ts` — `VK_TOKEN_RE` | `utils-html.test.ts` (shared-instance `lastIndex` reuse) |
+| `<VK-xxx>` regex | `parser.service.ts` — `VK_TOKEN_RE` (matches `</VK-xxx>` too) | `utils-html.test.ts` (shared-instance `lastIndex` reuse) · `vk-closing-tag.test.ts` binds the webview `vkWrap` twin |
 | Language tables | `types/constants.ts` — `LANG_ALIAS` / `LANG_FENCE` / `LANG_EXT` | `language-consistency.test.ts` |
 | Context-menu surfaces | `types/constants.ts` — each `ARTIFACTS` entry's `contexts` | `package-menus.test.ts` — pins `package.json` menus to `ARTIFACTS` |
 | Write-a-file vs insert | `types/constants.ts` — `writesFile`, read via `writesWholeFile` | `artifact-type-config.test.ts` — answer must equal the flag, every type |
@@ -363,6 +363,12 @@ npm test
   `markdown`, which is what makes `extForLang` yield `.md` downstream.
 - The whole-file path needed **zero changes**: region content lands in `code`, so
   `validateSingleBlock` and `resolveOutputFileName` apply unaltered.
+- **Tokens in an unfenced payload need a render-safe spelling.** `<VK-repo>` is
+  a legal HTML tag name, so Obsidian renders it as an unclosed custom element
+  that swallows every block below it (this is what broke the ` ```vks ` fence in
+  the vault examples). `<VK-repo></VK-repo>`, a lone `</VK-repo>`, or a name
+  with `_` all render fine — and all mean the **same variable**
+  ([`ARTIFACT_FILE_FORMAT.md` §4.1](ARTIFACT_FILE_FORMAT.md)).
 
 Rules, edge cases, and the vars interaction: [`ARTIFACT_FILE_FORMAT.md` §7](ARTIFACT_FILE_FORMAT.md).
 

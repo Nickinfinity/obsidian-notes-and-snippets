@@ -192,8 +192,11 @@ DB_URL=mongodb://localhost:27017
 
 - **`VK-`** is a fixed prefix. The hint after the hyphen can be any casing:
   `camelCase`, `UPPER_SNAKE`, `PascalCase`, `lowercase`.
-- **Regex:** `/<VK-([A-Za-z][A-Za-z0-9_]*)>/g` — hint must start with a letter;
+- **Regex:** `/<\/?VK-([A-Za-z][A-Za-z0-9_]*)>/g` — hint must start with a letter;
   subsequent characters may be letters, digits, or underscores.
+- **Closing form — `</VK-xxx>` is the same variable.** Both spellings detect,
+  deduplicate, score, and substitute identically; one input, one var-set entry.
+  See §4.1 for why it exists and how a pair resolves.
 - **Collision-free by design** — does not conflict with JS/TS generics or JSX,
   HTML tags, CSS, Vue (`v-` prefix differs), Python, Shell, Jinja, Handlebars
   (`{{}}` differs), or Markdown rendering.
@@ -208,6 +211,35 @@ DB_URL=mongodb://localhost:27017
   independently. The same token in two blocks produces a separate var in each.
 
 > **Rule:** Always use `<VK-xxx>` syntax. Never use `{{xxx}}`.
+
+### 4.1 The closing form — `</VK-xxx>`
+
+`<VK-repo>` is a **legal HTML open tag name** (CommonMark tag names allow
+letters, digits and hyphens — but not underscores). Inside a ` ``` ` fence that
+is harmless, but a **flagged payload (§7) is real markdown**: Obsidian parses the
+token as an unclosed custom element and every block after it — the rest of the
+prose, the ` ```vks ` fence — becomes its child instead of a top-level block, so
+the note stops rendering correctly.
+
+Closing the tag leaves nothing open. Both render-safe spellings are supported:
+
+| Spelling | Renders in Obsidian | Resolves to |
+|---|---|---|
+| `<VK-repo>` | ✗ swallows the rest of the note | value |
+| `<VK-repo></VK-repo>` | ✓ empty element, nothing left open | value **once** |
+| `</VK-repo>` | ✓ stray end tag, ignored by the parser | value |
+| `<VK-repo_name>` | ✓ `_` is illegal in a tag name → literal text | value |
+
+- **Substitution is two-pass** (`resolveVars`): an **adjacent** `<VK-x></VK-x>`
+  pair collapses to the value *once*, then every remaining opening or closing tag
+  resolves individually. `<VK-a></VK-b>` is not a pair — it is two tokens.
+  `<VK-x> text </VK-x>` is also two tokens (not adjacent), each substituted.
+- **Detection deduplicates across forms** — `<VK-x>` and `</VK-x>` in one file
+  yield a single `VK-x` variable, one preview input, one var-set match.
+- **Unknown variables stay literal** in both spellings, so partial substitution
+  is still safe.
+- The webview code area highlights both forms; its `vkWrap` twin is bound to
+  `VK_TOKEN_RE` by `test/vk-closing-tag.test.ts`.
 
 ---
 
@@ -414,14 +446,26 @@ since anything between them is payload.
 
 ~~~md
 %%oa:start%%
-Review <VK-repo> on <VK-branch>.
+Review <VK-repo_name> on <VK-branch_name>.
 %%oa:end%%
 
 vars:
 ```vks
-VK-repo=obsidian-artifacts
+VK-repo_name=obsidian-artifacts
 ```
 ~~~
+
+**Write flagged-payload tokens in a render-safe spelling.** A flagged payload is
+*not* inside a code fence, so Obsidian parses it as markdown — and a bare
+`<VK-repo>` is a legal HTML open tag that swallows every block below it,
+including this ` ```vks ` fence. Use `<VK-repo></VK-repo>`, a lone `</VK-repo>`,
+or a name containing `_`; **all three resolve to the same variable and the same
+output** (§4.1 has the full table).
+
+This is a **rendering-only** concern: the extension parses, resolves and writes
+every spelling identically, and payloads inside a ` ``` ` fence are immune (no
+HTML is parsed there). The vault's `AgentsConf/test/*.md` examples use the
+underscore form.
 
 ### 7.4 Whole-file types
 
