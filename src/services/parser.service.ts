@@ -21,6 +21,24 @@ const VALID_TYPES = new Set<string>(getAllTypes());
  */
 export const STRING_FRONTMATTER_KEYS = new Set<string>(['title', 'description', 'language', 'env', 'target', 'extension', 'provider', 'model', 'version']);
 
+/**
+ * Frontmatter keys the parser reads as **real booleans** — `true` only when the
+ * value is exactly `true`, so a stringly-typed `'false'` cannot leak downstream
+ * as a truthy value.
+ *
+ * **Read-side only:** `index` is deliberately absent from the serializer's
+ * `FRONTMATTER_KEY_ORDER`, which `test/frontmatter-keys.test.ts` guards.
+ */
+export const BOOLEAN_FRONTMATTER_KEYS = new Set<string>(['index']);
+
+/**
+ * Frontmatter keys the parser reads as **inline arrays** (`key: [a, b, c]`).
+ *
+ * `tags` and `paths` share `parseInlineArray`, so the inline-array splitting rule
+ * exists exactly once. `paths` is read-side only; `tags` round-trips normally.
+ */
+export const ARRAY_FRONTMATTER_KEYS = new Set<string>(['tags', 'paths']);
+
 // Shared regex constants — declared once to avoid SonarQube duplicated-literal flags
 // and to keep parsing rules in a single source of truth.
 const FRONTMATTER_BLOCK_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
@@ -136,15 +154,38 @@ function applyFrontmatterField(result: ParsedFrontmatter, key: string, raw: stri
         if (VALID_TYPES.has(raw)) { result.type = raw as ArtifactType; }
         return;
     }
-    if (key === 'tags') {
-        // Parse inline array syntax: `[a, b, c]` → `['a', 'b', 'c']`
-        const inner = raw.replaceAll(/^\[|\]$/g, '');
-        result.tags = inner.split(',').map(t => t.trim()).filter(Boolean);
+    if (ARRAY_FRONTMATTER_KEYS.has(key)) {
+        (result as unknown as Record<string, string[]>)[key] = parseInlineArray(raw);
+        return;
+    }
+    if (BOOLEAN_FRONTMATTER_KEYS.has(key)) {
+        // Exact `true` only — anything else is false, so no stringly-typed
+        // 'false' reaches a downstream `if (fm.index)` as a truthy value.
+        (result as unknown as Record<string, boolean>)[key] = raw === 'true';
         return;
     }
     if (STRING_FRONTMATTER_KEYS.has(key)) {
         (result as unknown as Record<string, string>)[key] = raw;
     }
+}
+
+/**
+ * Splits inline-array frontmatter syntax — `[a, b, c]` — into a trimmed list.
+ *
+ * The one owner of this rule: `tags` and `paths` both call it, so the split
+ * cannot drift into two implementations that disagree on whitespace or on empty
+ * entries. Brackets are optional; empty entries are dropped.
+ *
+ * @param raw - Trimmed raw value string as written after the key's colon.
+ * @returns Ordered list of non-empty trimmed entries; `[]` when the value is empty.
+ *
+ * @example
+ * parseInlineArray('[express, api]')          // → ['express', 'api']
+ * parseInlineArray('src/components, ui/src')  // → ['src/components', 'ui/src']
+ */
+function parseInlineArray(raw: string): string[] {
+    const inner = raw.replaceAll(/^\[|\]$/g, '');
+    return inner.split(',').map(t => t.trim()).filter(Boolean);
 }
 
 /**

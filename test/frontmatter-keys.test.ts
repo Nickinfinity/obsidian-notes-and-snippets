@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { STRING_FRONTMATTER_KEYS } from '../src/services/parser.service.js';
+import { STRING_FRONTMATTER_KEYS, parseFromContent } from '../src/services/parser.service.js';
 import { FRONTMATTER_KEY_ORDER } from '../src/services/artifact-serializer.service.js';
 
 /**
@@ -35,6 +35,43 @@ suite('frontmatter key lists — serializer vs parser', () => {
             assert.ok(
                 FRONTMATTER_KEY_ORDER.includes(key),
                 `parser reads "${key}" but the serializer never emits it — the key can be read but never written`
+            );
+        }
+    });
+});
+
+/**
+ * The two **read-side-only** index keys.
+ *
+ * They deliberately break the symmetry the suite above enforces for string keys:
+ * the parser reads them, the serializer never emits them (plan D11). A guard is
+ * needed because the obvious "fix" — adding them to `FRONTMATTER_KEY_ORDER` —
+ * would emit keys nothing in `ArtifactFormModel` ever sets.
+ */
+suite('index frontmatter keys — read-side only', () => {
+
+    const parse = (fm: string) => parseFromContent(`---\n${fm}\n---\n\nbody\n`, '/vault/Templates/i.md', '/vault/Templates').frontmatter;
+
+    test('reads index: true and the paths inline array', () => {
+        const fm = parse('type: template\nindex: true\npaths: [a/b, c]');
+        assert.strictEqual(fm.index, true);
+        assert.deepStrictEqual(fm.paths, ['a/b', 'c']);
+    });
+
+    test('a non-true index value is false, never truthy', () => {
+        assert.strictEqual(parse('type: template\nindex: false').index, false);
+        assert.strictEqual(parse('type: template\nindex: yes').index, false);
+    });
+
+    test('an absent index key stays undefined', () => {
+        assert.strictEqual(parse('type: template').index, undefined);
+    });
+
+    test('the serializer never emits either key', () => {
+        for (const key of ['index', 'paths']) {
+            assert.ok(
+                !FRONTMATTER_KEY_ORDER.includes(key),
+                `"${key}" is read-side only (plan D11) — emitting these needs ArtifactFormModel plumbing first`
             );
         }
     });
