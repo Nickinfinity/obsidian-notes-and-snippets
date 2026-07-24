@@ -9,7 +9,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (507 passing)
+npm run test           # Compile + lint + run all tests (605 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -57,6 +57,8 @@ src/
 │   ├── artifact-serializer.service.ts    # THE .md emitter — serializeArtifact
 │   ├── parser.service.ts                 # THE .md reader — parse*, extractVars, resolveVars, VK_TOKEN_RE
 │   ├── filename.service.ts               # THE slug — slugify, deriveFileName, validate* guards
+│   ├── template.service(.helpers).ts     # Whole-file types (template + agent) — resolveOutputFileName,
+│   │                                     # validateSingleBlock; helpers = path-injection/ext rules
 │   ├── artifact-patcher.service.ts       # Surgical in-place .md edits
 │   ├── artifact-writer.service.ts        # Atomic writes + isWithinRoot path-escape guard
 │   ├── vault.service.ts · context.service.ts     # Vault validation/detection; context keys
@@ -83,7 +85,7 @@ src/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
 │   └── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 507 tests. fixtures/ + snapshots/
+test/                                 # 605 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
 └── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
@@ -126,6 +128,9 @@ regression this list exists to prevent; each is held by a named guard test.
 | `<VK-xxx>` regex | `parser.service.ts` — `VK_TOKEN_RE` | `utils-html.test.ts` (shared-instance `lastIndex` reuse) |
 | Language tables | `types/constants.ts` — `LANG_ALIAS` / `LANG_FENCE` / `LANG_EXT` | `language-consistency.test.ts` |
 | Context-menu surfaces | `types/constants.ts` — each `ARTIFACTS` entry's `contexts` | `package-menus.test.ts` — pins `package.json` menus to `ARTIFACTS` |
+| Write-a-file vs insert | `types/constants.ts` — `writesFile`, read via `writesWholeFile` | `artifact-type-config.test.ts` — answer must equal the flag, every type |
+| Single-block restriction | `types/constants.ts` — `form.multiBlock`, read via `canMultiBlock` / `forcesSingleBlock` | `artifact-type-config.test.ts` — mirrors the flag, every create-form type |
+| Whole-file naming | `template.service.ts` — `resolveOutputFileName` | `template.service.test.ts` — agent `target:` verbatim vs template D3 chain |
 
 **Context menus are driven by `constants.ts`, always.** An artifact's
 `contexts` field is the single source for *where* its command shows (editor /
@@ -267,18 +272,54 @@ command registration. `default: true` (`Snippets`, `AgentsConf`) are auto-create
 on first vault selection; `default: false` (`Commands`, `Templates`, `Variables`)
 are detected but never auto-created.
 
-`agent` is a create-form type (`createForm: true`, `multiBlock: true`) with three
-optional, agent-only free-text frontmatter keys — `provider` / `model` / `version`
-— that thread through parser → serializer → form exactly like the template-only
-`extension` key (single-line enforced via `safeYamlValue`;
-[`ARTIFACT_FILE_FORMAT.md` §5.2](ARTIFACT_FILE_FORMAT.md)).
+### Templates and AI Agents Config — one flow, two rows in the table
 
-Like `template`, invoking an `agent` from the Explorer **writes a whole file** (the
-picker's primary button reads **Create File**, not Insert) named from `target:`,
-rather than inserting at the cursor. The write-vs-insert decision has **one owner**:
-`writesWholeFile(type)` in `artifact-type-config.service.ts` — used by both
-`preview.render.ts` (button label) and `preview.ts` (`handleInsert` branch), so the
-label and the behaviour can never drift. Never re-hardcode `type === 'template'`.
+`template` and `agent` are the two **whole-file** artifact types: invoking one
+from the Explorer writes a new file into the workspace (primary button reads
+**Create File**) instead of inserting at the cursor. Everything except *where the
+filename comes from* is literally the same code — treat any new
+`type === 'template'` or `type === 'agent'` literal as a bug.
+
+**How they differ** — only in three registry fields and the filename rule:
+
+| | `template` (`Templates/`) | `agent` (`AgentsConf/`) |
+|---|---|---|
+| `ARTIFACTS` row | `writesFile: true`, `multiBlock: false`, `default: false` | `writesFile: true`, `multiBlock: true`, `default: true` |
+| Type-only frontmatter | `extension:` | `provider:` / `model:` / `version:` |
+| Output filename | D3 precedence: typed → `extension:` → fence language | `target:` **verbatim** (`CLAUDE.md`, `.cursorrules`) — never extension-appended |
+
+**Shared path, file by file:**
+
+- `types/constants.ts` — `writesFile` and `form.multiBlock` are the *only*
+  declarations of this behaviour. Both flags are read through
+  `artifact-type-config.service.ts` (`writesWholeFile`, `forcesSingleBlock`,
+  `canMultiBlock`), never re-derived. `getEntry` stays the sole `ARTIFACTS`
+  traversal — the new accessors go through it too.
+- `services/template.service.ts` — owns both filename rules and the shared D1
+  single-block guard. Callers use **`resolveOutputFileName(artifact)`**, which
+  dispatches to `resolveAgentFileName` / `resolveTemplateFileName`; the panel
+  never branches on type. `validateSingleBlock(parsed, label)` is shared, the
+  human label passed in from `getTypeSingular(type)`.
+- `services/template.service.helpers.ts` — the rules *both* resolvers need:
+  `assertNoPathInjection` (hostile `target:`/`extension:` **throws**, never
+  sanitised), `carriesExtension`, `stripTrailingDots`.
+- `ui/panels/artifactPicker/preview.ts` — `handleInsert` branches once on
+  `writesWholeFile(type)` into the shared `handleCreateFile`;
+  `preview.render.ts` labels the button from the same call, so label and
+  behaviour cannot drift. `navigator.ts` routes 2+ block files with
+  `forcesSingleBlock(type)`, so a malformed multi-block template lands on the
+  single preview where the D1 error surfaces.
+- `parser.service.ts` / `artifact-serializer.service.ts` — the type-only keys are
+  just entries in `STRING_FRONTMATTER_KEYS` + `FRONTMATTER_KEY_ORDER`, all
+  emitted through `safeYamlValue` (single-line, so a newline cannot inject a
+  sibling key). Details: [`ARTIFACT_FILE_FORMAT.md` §5.2](ARTIFACT_FILE_FORMAT.md).
+- `ui/panels/artifactForm/form.html.ts` — `buildExtensionField` and
+  `buildAgentFieldsSection` both render through **`buildOptionalTextField`**, so
+  the markup and its `escHtml` seeding exist once. `form.clientJs.ts` reads all
+  four keys from one `TYPE_FIELD_IDS` list (absent input → `''`).
+
+Adding a third whole-file type is therefore a `constants.ts` row plus one branch
+in `resolveOutputFileName` — nothing else.
 
 ### No runtime dependencies
 

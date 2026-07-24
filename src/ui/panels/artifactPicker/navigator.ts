@@ -6,6 +6,7 @@ import { out } from './shared.js';
 import { ArtifactItem, buildItem, PREVIEW_DEBOUNCE_MS } from './navigator.helpers.js';
 import { PreviewPanelController, blockAsArtifact } from './preview.js';
 import { getVaultRootUri } from '../../../services/config.service.js';
+import { forcesSingleBlock } from '../../../services/artifact-type-config.service.js';
 
 /**
  * Opens a QuickPick navigator for the given vault artifact directory.
@@ -266,14 +267,19 @@ class ArtifactNavigator {
      * is deliberately routed to the single preview so the Create File handler
      * surfaces the D1 error, rather than letting the user drill into its blocks.
      *
+     * Which types those are is **not** re-stated here — `forcesSingleBlock`
+     * derives it from the same `ARTIFACTS.form.multiBlock` flag the create form
+     * reads, so agent (multi-block) and template (single) can never disagree
+     * between the form and the picker.
+     *
      * @param artifact - The parsed artifact under consideration.
-     * @returns `true` when it has 2+ blocks and is not a template.
+     * @returns `true` when it has 2+ blocks and its type allows multiple.
      *
      * @example
      * this.isMultiBlockNav(artifact) ? showMultiBlockPreview(artifact) : showPreview(artifact)
      */
     private isMultiBlockNav(artifact: ParsedArtifactFile): boolean {
-        return artifact.blocks.length > 1 && artifact.frontmatter.type !== 'template';
+        return artifact.blocks.length > 1 && !forcesSingleBlock(artifact.frontmatter.type);
     }
 
     // ── Parsing & cache ───────────────────────────────────────────────────────

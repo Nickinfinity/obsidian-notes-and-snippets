@@ -39,6 +39,9 @@ export const ARTIFACTS: ArtifactsArray = [
 		default: true,
 		contexts: ['explorer'],
 		createForm: true,
+		// Invoking an agent config writes the whole file (named from `target:`),
+		// exactly like a template — same flag, one shared code path.
+		writesFile: true,
 		// D4: agent reuses the multi-block form machinery (matches ARTIFACT_FILE_FORMAT.md §5).
 		// `free` language mirrors snippet/template; provider/model/version are agent-only
 		// frontmatter keys rendered by buildAgentFieldsSection, not a language concern.
@@ -71,6 +74,7 @@ export const ARTIFACTS: ArtifactsArray = [
 		// block; a 2+ block file is a validation error, expressed here in the table.
 		contexts: ['explorer'],
 		createForm: true,
+		writesFile: true,
 		form: {
 			language: { mode: 'free', default: '' },
 			label: { singular: 'template' },

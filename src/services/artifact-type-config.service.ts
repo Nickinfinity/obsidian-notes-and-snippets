@@ -162,9 +162,14 @@ export function getCreateFormTypes(): ArtifactType[] {
  * Reports whether invoking this artifact type writes a whole file into the
  * workspace (the Explorer "Create File" flow) instead of inserting at the cursor.
  *
- * Two types write files: `template` (filename from the D3 extension-precedence
- * chain) and `agent` (filename seeded from the `target:` frontmatter key, e.g.
- * `CLAUDE.md`). Every other type inserts at the cursor or sends to the terminal.
+ * Two types write files today: `template` (filename from the D3
+ * extension-precedence chain) and `agent` (filename seeded from the `target:`
+ * frontmatter key, e.g. `CLAUDE.md`). Every other type inserts at the cursor or
+ * sends to the terminal.
+ *
+ * **Derived from `ARTIFACTS.writesFile`, never a type-literal check** — a
+ * hardcoded `type === 'template' || type === 'agent'` is the enumeration class
+ * that silently drifts when a third file-writing type is added.
  *
  * **Single source for the behaviour** — the preview's primary-button label
  * (`Create File` vs `Insert`) and the insert handler's write-vs-paste branch both
@@ -172,6 +177,7 @@ export function getCreateFormTypes(): ArtifactType[] {
  *
  * @param type - Canonical `ArtifactType` literal.
  * @returns `true` for `template` and `agent`; `false` otherwise.
+ * @throws When the type is unknown (via `getEntry`).
  *
  * @example
  * writesWholeFile('template'); // → true
@@ -179,7 +185,30 @@ export function getCreateFormTypes(): ArtifactType[] {
  * writesWholeFile('snippet');  // → false
  */
 export function writesWholeFile(type: ArtifactType): boolean {
-    return type === 'template' || type === 'agent';
+    return getEntry(type).writesFile === true;
+}
+
+/**
+ * Reports whether a type is restricted to a single code block (D1).
+ *
+ * Derived from the same `form.multiBlock` flag `canMultiBlock` reads, but
+ * **non-throwing**: types with no create form (`variables`) answer `false`, so
+ * navigation code can ask about any parsed file without a try/catch.
+ *
+ * The picker uses it to route a malformed 2+ block template to the single
+ * preview, where the Create File handler surfaces the D1 error.
+ *
+ * @param type - Canonical `ArtifactType` literal.
+ * @returns `true` only when the type declares `form.multiBlock === false`.
+ * @throws When the type is unknown (via `getEntry`) — a *missing form* is not an error.
+ *
+ * @example
+ * forcesSingleBlock('template');  // → true
+ * forcesSingleBlock('agent');     // → false
+ * forcesSingleBlock('variables'); // → false — no form config, no throw
+ */
+export function forcesSingleBlock(type: ArtifactType): boolean {
+    return getEntry(type).form?.multiBlock === false;
 }
 
 /**

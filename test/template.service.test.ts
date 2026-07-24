@@ -2,7 +2,8 @@ import * as assert from 'node:assert';
 import {
     resolveTemplateFileName,
     resolveAgentFileName,
-    validateTemplateBlocks,
+    resolveOutputFileName,
+    validateSingleBlock,
 } from '../src/services/template.service.js';
 import type { ParsedArtifactFile, ParsedBlock } from '../src/types/parsed-artifact.types.js';
 
@@ -90,7 +91,7 @@ suite('resolveTemplateFileName — path-injection is rejected, not sanitised', (
     }
 });
 
-// ── validateTemplateBlocks — single-block guard (D1) ─────────────────────────────
+// ── validateSingleBlock — single-block guard (D1) ─────────────────────────────
 
 function block(heading: string): ParsedBlock {
     return { heading, description: '', code: 'x', fenceLang: 'ts', vars: [] };
@@ -133,18 +134,60 @@ suite('resolveAgentFileName', () => {
     });
 });
 
-suite('validateTemplateBlocks', () => {
+// ── resolveOutputFileName — the shared entry point both types go through ─────────
+
+suite('resolveOutputFileName', () => {
+
+    /** Builds a parsed file carrying only the frontmatter under test. */
+    function artifactWith(frontmatter: ParsedArtifactFile['frontmatter'], fileName = 'x'): ParsedArtifactFile {
+        return { ...parsedWith([]), fileName, frontmatter };
+    }
+
+    test('an agent routes to the target:-verbatim rule, not the extension chain', () => {
+        // The regression this guards: dispatching an agent through the template
+        // chain turns '.cursorrules' into '.cursorrules.md'.
+        assert.strictEqual(
+            resolveOutputFileName(artifactWith({ type: 'agent', target: '.cursorrules', language: 'markdown' })),
+            '.cursorrules',
+        );
+    });
+
+    test('a template routes to the D3 extension chain', () => {
+        assert.strictEqual(
+            resolveOutputFileName(artifactWith({ type: 'template', extension: 'tsx' }, 'button')),
+            'button.tsx',
+        );
+    });
+
+    test('both types fall back to the title before the vault file name', () => {
+        assert.strictEqual(
+            resolveOutputFileName(artifactWith({ type: 'agent', title: 'Claude reviewer' }, 'ignored')),
+            'Claude reviewer.md',
+        );
+        assert.strictEqual(
+            resolveOutputFileName(artifactWith({ type: 'template', title: 'Button', language: 'tsx' }, 'ignored')),
+            'Button.tsx',
+        );
+    });
+
+    test('a hostile frontmatter value throws through the dispatcher too', () => {
+        assert.throws(() => resolveOutputFileName(artifactWith({ type: 'agent', target: '../../etc/passwd' })), /path separator/);
+        assert.throws(() => resolveOutputFileName(artifactWith({ type: 'template', extension: '../x' })), /path separator/);
+    });
+});
+
+suite('validateSingleBlock', () => {
 
     test('a single-block file (empty blocks array) is ok', () => {
-        assert.deepStrictEqual(validateTemplateBlocks(parsedWith([])), { ok: true });
+        assert.deepStrictEqual(validateSingleBlock(parsedWith([])), { ok: true });
     });
 
     test('exactly one ## block is ok', () => {
-        assert.deepStrictEqual(validateTemplateBlocks(parsedWith([block('One')])), { ok: true });
+        assert.deepStrictEqual(validateSingleBlock(parsedWith([block('One')])), { ok: true });
     });
 
     test('two or more blocks is rejected with the count named', () => {
-        const res = validateTemplateBlocks(parsedWith([block('One'), block('Two'), block('Three')]));
+        const res = validateSingleBlock(parsedWith([block('One'), block('Two'), block('Three')]));
         assert.strictEqual(res.ok, false);
         if (!res.ok) {
             assert.ok(res.reason.includes('3'), `reason should name the block count, got: ${res.reason}`);

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { parseFromContent, resolveVars } from '../../../services/parser.service.js';
 import { renderCodeHtml, renderCodeRowsHtml } from '../../../services/render.service.js';
-import { validateTemplateBlocks, resolveTemplateFileName, resolveAgentFileName } from '../../../services/template.service.js';
+import { validateSingleBlock, resolveOutputFileName } from '../../../services/template.service.js';
 import { writesWholeFile, getTypeSingular } from '../../../services/artifact-type-config.service.js';
 import { writeTemplateFile } from '../../../services/template-writer.service.js';
 import { resolveDestination } from '../../../services/template-destination.service.js';
@@ -309,7 +309,7 @@ export class PreviewPanelController {
         const type = artifact.frontmatter.type;
 
         // ── D1: single-block only (template) / one config file (agent) ────────
-        const blockCheck = validateTemplateBlocks(artifact, getTypeSingular(type));
+        const blockCheck = validateSingleBlock(artifact, getTypeSingular(type));
         if (!blockCheck.ok) {
             void vscode.window.showErrorMessage(`Obsidian Artifacts: ${blockCheck.reason}`);
             return;
@@ -325,22 +325,12 @@ export class PreviewPanelController {
         }
 
         // ── Default filename — throws on a hostile frontmatter value ──────────
-        // Template: D3 extension precedence. Agent: the `target:` key is already the
-        // whole filename (CLAUDE.md, .cursorrules) so it is used verbatim, not
-        // extension-appended — a `target:` carrying `/`, `..`, or a NUL throws,
-        // never sanitised (both resolvers share `assertNoPathInjection`).
+        // Per-type naming (template = D3 extension precedence, agent = `target:`
+        // verbatim) is the service's decision, not the panel's; a hostile value
+        // throws here rather than being sanitised into a plausible path.
         let defaultName: string;
         try {
-            defaultName = type === 'agent'
-                ? resolveAgentFileName({
-                    target:       artifact.frontmatter.target,
-                    fallbackBase: artifact.frontmatter.title || artifact.fileName,
-                })
-                : resolveTemplateFileName({
-                    frontmatterExt: artifact.frontmatter.extension,
-                    langId:         artifact.frontmatter.language,
-                    fallbackBase:   artifact.frontmatter.title || artifact.fileName,
-                });
+            defaultName = resolveOutputFileName(artifact);
         } catch (err) {
             void vscode.window.showErrorMessage(`Obsidian Artifacts: ${(err as Error).message}`);
             return;

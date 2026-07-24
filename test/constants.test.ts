@@ -113,6 +113,29 @@ suite('ARTIFACTS per-type form config', () => {
         assert.strictEqual(findByType('agent')!.form!.multiBlock, true);
     });
 
+    // ── whole-file types (template + agent share one flow) ───────────────────
+
+    test('template: writesFile === true (Explorer Create File flow)', () => {
+        assert.strictEqual(findByType('template')!.writesFile, true);
+    });
+
+    test('agent: writesFile === true — same flow as template, target:-named', () => {
+        assert.strictEqual(findByType('agent')!.writesFile, true);
+    });
+
+    /**
+     * The registry, not a service literal, decides who writes a file. Dropping
+     * `writesFile` from a row must flip the behaviour (guarded downstream by
+     * `artifact-type-config.test.ts`), and a cursor-insert type must never
+     * acquire it by accident.
+     */
+    test('cursor-insert types declare no writesFile flag', () => {
+        for (const type of ['snippet', 'command', 'variables'] as const) {
+            assert.notStrictEqual(findByType(type)!.writesFile, true,
+                `${type} must not declare writesFile — it inserts, it does not write a file`);
+        }
+    });
+
     // ── excluded types: createForm !== true ──────────────────────────────────
 
     test('variables: createForm !== true (own save-as flow)', () => {

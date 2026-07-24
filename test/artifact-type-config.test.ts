@@ -9,6 +9,7 @@ import {
     canMultiBlock,
     getCreateFormTypes,
     writesWholeFile,
+    forcesSingleBlock,
 } from '../src/services/artifact-type-config.service.js';
 import { ARTIFACTS } from '../src/types/constants.js';
 import type { ArtifactType } from '../src/types/parsed-artifact.types.js';
@@ -168,6 +169,49 @@ suite('artifact-type-config.service', () => {
             assert.strictEqual(writesWholeFile('snippet'), false);
             assert.strictEqual(writesWholeFile('command'), false);
             assert.strictEqual(writesWholeFile('variables'), false);
+        });
+
+        /**
+         * Drift guard: the answer must be **derived** from `ARTIFACTS.writesFile`,
+         * not a hardcoded `type === 'template' || type === 'agent'`. Reintroduce
+         * that literal check and this fails the moment the table and the code
+         * disagree — the exact class of drift `CLAUDE.md` names.
+         */
+        test('answers exactly what ARTIFACTS.writesFile declares, for every type', () => {
+            for (const entry of ARTIFACTS) {
+                assert.strictEqual(writesWholeFile(entry.type), entry.writesFile === true,
+                    `writesWholeFile('${entry.type}') disagrees with its ARTIFACTS.writesFile flag`);
+            }
+        });
+    });
+
+    // ── forcesSingleBlock ────────────────────────────────────────────────────
+
+    suite('forcesSingleBlock', () => {
+        // Non-throwing sibling of canMultiBlock — the picker asks it about every
+        // parsed file, including types with no create form.
+        test('template forces a single block (D1)', () => {
+            assert.strictEqual(forcesSingleBlock('template'), true);
+        });
+
+        test('multi-block-capable types do not', () => {
+            assert.strictEqual(forcesSingleBlock('agent'), false);
+            assert.strictEqual(forcesSingleBlock('snippet'), false);
+            assert.strictEqual(forcesSingleBlock('command'), false);
+        });
+
+        test('a type with no form config answers false instead of throwing', () => {
+            // canMultiBlock('variables') throws; navigation code must not need a try/catch.
+            assert.strictEqual(forcesSingleBlock('variables'), false);
+        });
+
+        /** Drift guard: it is the inverse of the same `form.multiBlock` flag. */
+        test('mirrors ARTIFACTS.form.multiBlock for every create-form type', () => {
+            for (const entry of ARTIFACTS) {
+                if (entry.form === undefined) { continue; }
+                assert.strictEqual(forcesSingleBlock(entry.type), !entry.form.multiBlock,
+                    `forcesSingleBlock('${entry.type}') disagrees with its form.multiBlock flag`);
+            }
         });
     });
 
