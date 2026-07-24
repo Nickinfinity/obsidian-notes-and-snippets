@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getAllTypes, getTypeForDir } from './artifact-type-config.service.js';
+import { extractFlaggedRegions, type FlaggedRegion } from './flags.service.js';
 import type { ArtifactType, ParsedArtifactFile, ParsedBlock, ParsedFrontmatter, ParsedVar } from '../types/parsed-artifact.types.js';
 
 // Accepted `type` values — any unrecognised value keeps the 'snippet' fallback.
@@ -26,6 +27,31 @@ const FRONTMATTER_BLOCK_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
 const FRONTMATTER_STRIP_RE = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
 const CODE_FENCE_RE        = /```(\w*)\r?\n([\s\S]*?)```/;
 const VKS_FENCE_RE         = /```vks\r?\n([\s\S]*?)```/;
+
+/**
+ * Fence language reported for a flag-delimited payload.
+ *
+ * The payload is the vault note's own markdown, so `markdown` is what it is —
+ * and it makes the whole chain agree without a special case: hljs highlights it,
+ * and `extForLang('markdown')` yields the `.md` a written agent config wants.
+ */
+const FLAGGED_PAYLOAD_LANG = 'markdown';
+
+/**
+ * Removes the leading `---` frontmatter block from file content.
+ *
+ * Four call sites needed this; as inline `.replace(FRONTMATTER_STRIP_RE, '')`
+ * calls the strip rule was quietly restated each time.
+ *
+ * @param content - Full UTF-8 file content.
+ * @returns The body with any frontmatter block removed.
+ *
+ * @example
+ * stripFrontmatter('---\ntype: snippet\n---\nbody') // → 'body'
+ */
+function stripFrontmatter(content: string): string {
+    return content.replace(FRONTMATTER_STRIP_RE, '');
+}
 
 /**
  * Matches a `<VK-Hint>` variable token, where `Hint` starts with a letter.
@@ -114,7 +140,7 @@ function applyFrontmatterField(result: ParsedFrontmatter, key: string, raw: stri
  */
 function parseCodeBlock(content: string): { code: string; fenceLang?: string } {
     // Strip frontmatter before scanning to avoid matching a fence inside it
-    const afterFrontmatter = content.replace(FRONTMATTER_STRIP_RE, '');
+    const afterFrontmatter = stripFrontmatter(content);
     const match = CODE_FENCE_RE.exec(afterFrontmatter);
     if (!match) { return { code: '' }; }
     return {
@@ -168,10 +194,13 @@ function parseVars(content: string): ParsedVar[] {
     if (fenced) { return parseVarLines(fenced[1]); }
 
     // Priority 2: unfenced section after the code block ("vars:" or "vars" label)
-    const afterCode = content
-        .replace(FRONTMATTER_STRIP_RE, '') // strip frontmatter
+    const afterCode = stripFrontmatter(content)
         .replace(CODE_FENCE_RE, '');       // strip first code block
-    const unfenced = /\bvars:?\s*\r?\n([\s\S]+?)(?:\n\n|\n*$)/.exec(afterCode);
+    // `(?:\n\n|$)` — not `(?:\n\n|\n*$)`: the trailing `\n*` overlapped with the
+    // lazy body group, giving the engine many equivalent ways to split the same
+    // text (super-linear backtracking, S8786). Behaviour is identical because
+    // `parseVarLines` discards the blank trailing line either way.
+    const unfenced = /\bvars:?[ \t]*\r?\n([\s\S]+?)(?:\n\n|$)/.exec(afterCode);
     if (unfenced) { return parseVarLines(unfenced[1]); }
 
     return [];
@@ -249,7 +278,7 @@ export function resolveVars(code: string, vars: Record<string, string>): string 
 
 export function parseBlocks(content: string): ParsedBlock[] {
     // Strip frontmatter before scanning
-    const body = content.replace(FRONTMATTER_STRIP_RE, '');
+    const body = stripFrontmatter(content);
 
     // Split on ## headings — keep delimiter at start of each chunk via lookahead
     const sections = body.split(/(?=^## )/m).filter(s => s.startsWith('## '));
@@ -372,16 +401,92 @@ export function parseFromContent(content: string, filePath: string, artifactRoot
     // `Commands/` file parsed as 'snippet' and inserted at the cursor instead
     // of being sent to the terminal.
     const frontmatter = parseFrontmatter(content, getTypeForDir(path.basename(artifactRootDir)));
-    const { code, fenceLang } = parseCodeBlock(content);
-    if (!frontmatter.language && fenceLang) { frontmatter.language = fenceLang; }
+
+    // Flags win over fences: a file that delimits its payload with flags
+    // (syntax owned by `flags.service.ts`) says so explicitly, and its markdown
+    // body would otherwise be read as "no code block at all". Files without
+    // flags take the classic path unchanged — this is additive, so no existing
+    // vault file re-parses differently.
+    const regions = extractFlaggedRegions(stripFrontmatter(content));
+    const payload = regions.length > 0
+        ? readFlaggedPayload(regions, content)
+        : readFencedPayload(content);
+
+    if (!frontmatter.language && payload.fenceLang) { frontmatter.language = payload.fenceLang; }
     return {
         filePath,
         fileName:     path.basename(filePath, '.md'),
         relativePath: path.relative(artifactRootDir, filePath),
         frontmatter,
-        code,
-        vars:         parseVars(content),
-        blocks:       parseBlocks(content),
+        code:         payload.code,
+        vars:         payload.vars,
+        blocks:       payload.blocks,
+    };
+}
+
+/** The four payload fields a file's body yields, however it is delimited. */
+interface ParsedPayload {
+    code: string;
+    fenceLang?: string;
+    vars: ParsedVar[];
+    blocks: ParsedBlock[];
+}
+
+/**
+ * Reads the classic fence-delimited payload — the pre-flags behaviour, moved
+ * behind one name so `parseFromContent` states the choice in a single line.
+ *
+ * @param content - Full UTF-8 file content (frontmatter included).
+ * @returns Code, fence language, explicit vars, and `##` blocks.
+ *
+ * @example
+ * readFencedPayload('---\ntype: snippet\n---\n```js\nx\n```')
+ */
+function readFencedPayload(content: string): ParsedPayload {
+    const { code, fenceLang } = parseCodeBlock(content);
+    return { code, fenceLang, vars: parseVars(content), blocks: parseBlocks(content) };
+}
+
+/**
+ * Reads a flag-delimited payload: the region content **is** the artifact, kept
+ * verbatim (inner ` ``` ` fences and all).
+ *
+ * Shape follows the existing conventions rather than inventing new ones — one
+ * region is a single-block file (empty `blocks`, its name decorative, the title
+ * comes from frontmatter); two or more become `ParsedBlock`s keyed by their flag
+ * names, so the multi-block picker and preview work with no new UI.
+ *
+ * Unlike the fenced path, vars are **auto-detected** from the payload and then
+ * overlaid with any explicit ` ```vks ` defaults — a prompt's whole value is its
+ * `<VK-xxx>` tokens, so requiring an explicit list would be a trap. Keep the
+ * ` ```vks ` fence outside the flags: defaults are file-level, and anything
+ * between the flags is payload.
+ *
+ * @param regions - Regions found in the body, in document order (never empty).
+ * @param content - Full UTF-8 file content, for the file-level vars section.
+ * @returns Code, `markdown` fence language, merged vars, and per-region blocks.
+ *
+ * @example
+ * readFlaggedPayload([{ name: '', content: 'Review <VK-file>' }], fileText)
+ */
+function readFlaggedPayload(regions: FlaggedRegion[], content: string): ParsedPayload {
+    const defaults = parseVars(content);
+    const varsFor  = (code: string): ParsedVar[] => mergeVarDefaults(extractVars(code), defaults);
+    const first    = regions[0];
+
+    return {
+        code:      first.content,
+        fenceLang: FLAGGED_PAYLOAD_LANG,
+        vars:      varsFor(first.content),
+        blocks:    regions.length > 1
+            ? regions.map(r => ({
+                heading:     r.name,
+                description: '',
+                code:        r.content,
+                fenceLang:   FLAGGED_PAYLOAD_LANG,
+                vars:        varsFor(r.content),
+            }))
+            : [],
     };
 }
 

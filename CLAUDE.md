@@ -9,7 +9,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (605 passing)
+npm run test           # Compile + lint + run all tests (636 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -56,6 +56,7 @@ src/
 │   ├── config.service.ts                 # THE settings reader — CONFIG_SECTION, getVaultPath(RootUri)
 │   ├── artifact-serializer.service.ts    # THE .md emitter — serializeArtifact
 │   ├── parser.service.ts                 # THE .md reader — parse*, extractVars, resolveVars, VK_TOKEN_RE
+│   ├── flags.service.ts                  # THE %%oa:start%%/%%oa:end%% syntax — extractFlaggedRegions
 │   ├── filename.service.ts               # THE slug — slugify, deriveFileName, validate* guards
 │   ├── template.service(.helpers).ts     # Whole-file types (template + agent) — resolveOutputFileName,
 │   │                                     # validateSingleBlock; helpers = path-injection/ext rules
@@ -85,7 +86,7 @@ src/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
 │   └── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 605 tests. fixtures/ + snapshots/
+test/                                 # 636 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
 └── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
@@ -131,6 +132,7 @@ regression this list exists to prevent; each is held by a named guard test.
 | Write-a-file vs insert | `types/constants.ts` — `writesFile`, read via `writesWholeFile` | `artifact-type-config.test.ts` — answer must equal the flag, every type |
 | Single-block restriction | `types/constants.ts` — `form.multiBlock`, read via `canMultiBlock` / `forcesSingleBlock` | `artifact-type-config.test.ts` — mirrors the flag, every create-form type |
 | Whole-file naming | `template.service.ts` — `resolveOutputFileName` | `template.service.test.ts` — agent `target:` verbatim vs template D3 chain |
+| Flag syntax (`%%oa:…%%`) | `flags.service.ts` — `extractFlaggedRegions` | `flags.service.test.ts` — no other `src/` file may spell the marker |
 
 **Context menus are driven by `constants.ts`, always.** An artifact's
 `contexts` field is the single source for *where* its command shows (editor /
@@ -230,6 +232,10 @@ signals a single-block file. Tokens are auto-detected by `extractVars`; a
 section whose **first** fence is ` ```vks ` is a pure sub-set, while a code
 fence *followed by* one gets defaults merged via `mergeVarDefaults` (code order
 kept, vks-only keys appended, unmatched detected vars keep `''`).
+
+The body is read one of **two** ways, chosen in a single line of
+`parseFromContent`: `readFlaggedPayload` when the file carries flags (see above),
+`readFencedPayload` — the classic behaviour, unchanged — otherwise.
 **`ARTIFACT_FILE_FORMAT.md` is the authority on all of this** — read it before
 touching the parser, the serializer, or any fixture.
 
@@ -320,6 +326,45 @@ filename comes from* is literally the same code — treat any new
 
 Adding a third whole-file type is therefore a `constants.ts` row plus one branch
 in `resolveOutputFileName` — nothing else.
+
+### Flags — plain-markdown payloads (`services/flags.service.ts`)
+
+A vault note is already markdown, so an artifact whose payload *is* markdown (an
+agent config; the planned **AI-prompt** snippet subtype) has nothing to wrap it
+in — a fence is wrong because the payload may contain fences. **Flags** mark
+where the artifact starts and ends, using Obsidian's own comment syntax so they
+are invisible in reading view:
+
+```md
+notes that are not part of the artifact
+
+%%oa:start Dev%%
+Review <VK-repo>.
+
+```bash
+npm test
+```
+%%oa:end%%
+```
+
+- **`flags.service.ts` owns the syntax — nothing else may spell it.**
+  `extractFlaggedRegions(body)` is the whole API; `flags.service.test.ts` fails
+  if any other `src/` file contains the marker, doc comments included (point at
+  the service by name instead).
+- **Type-agnostic by design.** The parser applies it to every file, so the
+  AI-prompt subtype lands as an `ARTIFACTS` row with **no extraction code**.
+- **Flags beat fences**, and are purely additive: a file with no flags parses
+  exactly as before. `parser.service.ts` picks between `readFlaggedPayload` and
+  `readFencedPayload` in one line.
+- One region → single-block file; **named regions → `ParsedBlock`s** keyed by the
+  name, reusing the multi-block picker with no new UI.
+- Scanning **skips fenced regions** (a prompt documenting the syntax in a
+  ` ```md ` sample must not terminate itself) and defaults `language` to
+  `markdown`, which is what makes `extForLang` yield `.md` downstream.
+- The whole-file path needed **zero changes**: region content lands in `code`, so
+  `validateSingleBlock` and `resolveOutputFileName` apply unaltered.
+
+Rules, edge cases, and the vars interaction: [`ARTIFACT_FILE_FORMAT.md` §7](ARTIFACT_FILE_FORMAT.md).
 
 ### No runtime dependencies
 
