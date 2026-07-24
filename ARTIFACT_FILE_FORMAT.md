@@ -38,7 +38,8 @@ VK-anotherVar=
 
 - **Frontmatter** — YAML between `---` fences. Recognised keys: `type` (required;
   unknown value falls back to `snippet`), `title`, `description`, `language`,
-  `tags` (inline array `[a, b]`), `env`, `target`.
+  `extension` (template-only, §5.1), `provider` / `model` / `version` (agent-only,
+  §5.2), `tags` (inline array `[a, b]`), `env`, `target`.
 - **Blank line after frontmatter is optional.** The code fence may sit on the
   very next line after the closing `---` (real files do this), or be separated
   by one or more blank lines. A serializer may emit either; round-trip is
@@ -46,6 +47,8 @@ VK-anotherVar=
 - **Code block** — first fenced block after frontmatter. Info string may be
   `code`, a real language (`javascript`), or **empty** (plain text). Trailing
   whitespace is trimmed on parse — a serializer must trim too for round-trip.
+  **A file may delimit its payload with flags instead of a fence** (§7) — for
+  artifacts whose content is markdown, such as agent configs.
 - **Vars (defaults)** — optional. Accepted forms, parser priority order:
   1. A ` ```vks ` fenced block (preferred, unambiguous). May be preceded by a
      decorative label line — `vars:`, `vars`, `### VKs:`, prose, blank lines.
@@ -70,9 +73,12 @@ unfenced `vars:` form. Emitting a `vars:` label line immediately before the
 ### 1.1 Serializer rules — single-block
 
 - **Canonical frontmatter key order:** `type`, `title`, `description`,
-  `language`, `tags`, `env`, `target`. Keys with empty/undefined values are
-  omitted (except `type`, always emitted). Reserved keys (`env`, `target`) sit
-  at the end so future additions append cleanly.
+  `language`, `extension`, `provider`, `model`, `version`, `tags`, `env`,
+  `target` (the serializer's `FRONTMATTER_KEY_ORDER`). Keys with empty/undefined
+  values are omitted (except `type`, always emitted). The type-specific keys
+  (`extension` = template, `provider`/`model`/`version` = agent) group after
+  `language`; reserved keys (`env`, `target`) sit at the end so future additions
+  append cleanly.
 - **Language is emitted in both frontmatter and the code fence info-string**
   for single-block files. The parser hoists fence → frontmatter when the
   frontmatter key is missing (`parser.service.ts` line 346); emitting both is
@@ -186,8 +192,11 @@ DB_URL=mongodb://localhost:27017
 
 - **`VK-`** is a fixed prefix. The hint after the hyphen can be any casing:
   `camelCase`, `UPPER_SNAKE`, `PascalCase`, `lowercase`.
-- **Regex:** `/<VK-([A-Za-z][A-Za-z0-9_]*)>/g` — hint must start with a letter;
+- **Regex:** `/<\/?VK-([A-Za-z][A-Za-z0-9_]*)>/g` — hint must start with a letter;
   subsequent characters may be letters, digits, or underscores.
+- **Closing form — `</VK-xxx>` is the same variable.** Both spellings detect,
+  deduplicate, score, and substitute identically; one input, one var-set entry.
+  See §4.1 for why it exists and how a pair resolves.
 - **Collision-free by design** — does not conflict with JS/TS generics or JSX,
   HTML tags, CSS, Vue (`v-` prefix differs), Python, Shell, Jinja, Handlebars
   (`{{}}` differs), or Markdown rendering.
@@ -203,6 +212,35 @@ DB_URL=mongodb://localhost:27017
 
 > **Rule:** Always use `<VK-xxx>` syntax. Never use `{{xxx}}`.
 
+### 4.1 The closing form — `</VK-xxx>`
+
+`<VK-repo>` is a **legal HTML open tag name** (CommonMark tag names allow
+letters, digits and hyphens — but not underscores). Inside a ` ``` ` fence that
+is harmless, but a **flagged payload (§7) is real markdown**: Obsidian parses the
+token as an unclosed custom element and every block after it — the rest of the
+prose, the ` ```vks ` fence — becomes its child instead of a top-level block, so
+the note stops rendering correctly.
+
+Closing the tag leaves nothing open. Both render-safe spellings are supported:
+
+| Spelling | Renders in Obsidian | Resolves to |
+|---|---|---|
+| `<VK-repo>` | ✗ swallows the rest of the note | value |
+| `<VK-repo></VK-repo>` | ✓ empty element, nothing left open | value **once** |
+| `</VK-repo>` | ✓ stray end tag, ignored by the parser | value |
+| `<VK-repo_name>` | ✓ `_` is illegal in a tag name → literal text | value |
+
+- **Substitution is two-pass** (`resolveVars`): an **adjacent** `<VK-x></VK-x>`
+  pair collapses to the value *once*, then every remaining opening or closing tag
+  resolves individually. `<VK-a></VK-b>` is not a pair — it is two tokens.
+  `<VK-x> text </VK-x>` is also two tokens (not adjacent), each substituted.
+- **Detection deduplicates across forms** — `<VK-x>` and `</VK-x>` in one file
+  yield a single `VK-x` variable, one preview input, one var-set match.
+- **Unknown variables stay literal** in both spellings, so partial substitution
+  is still safe.
+- The webview code area highlights both forms; its `vkWrap` twin is bound to
+  `VK_TOKEN_RE` by `test/vk-closing-tag.test.ts`.
+
 ---
 
 ## 5. Per-artifact variations
@@ -215,7 +253,7 @@ DB_URL=mongodb://localhost:27017
 | `snippet` | `Snippets` | yes (or plain text) | language or empty | ` ```vks ` | yes | Editor insert. |
 | `template` | `Templates` | yes (or plain text) | language or empty | ` ```vks ` | **no (D1)** | Explorer → **writes a whole file** into the workspace. Single-block only. `extension:` overrides the fence language (see §5.1). |
 | `command` | `Commands` | yes — **locked to `bash`** | `bash` (locked by serializer) | ` ```vks ` | yes | Terminal insert. |
-| `agent` | `AgentsConf` | optional | language or empty | ` ```vks ` | yes | `target:` names the destination file (e.g. `CLAUDE.md`). Future: multi-file folder + marker. |
+| `agent` | `AgentsConf` | optional | language, empty, **or none — flags instead (§7)** | ` ```vks ` | yes* | Explorer → **writes a whole file** into the workspace (like `template`), named from `target:` (§5.2). `provider` / `model` / `version` record the AI provenance (agent-only, §5.2). *Create File enforces a single block/region. |
 | `variables` | `Variables` | n/a | ` ```vks ` only | the block itself | yes (sub-sets) | `env:` labels the environment. Variable Sets live here. |
 
 Rules a serializer enforces:
@@ -238,12 +276,15 @@ Rules a serializer enforces:
 - **vks fence:** emit only when at least one var has a non-empty default value.
 - **`extension`:** a `type: template`-only frontmatter key. Emitted verbatim
   (single line enforced) when non-empty, in the key order
-  `type · title · description · language · extension · tags · env · target`.
+  `type · title · description · language · extension · provider · model · version · tags · env · target`.
   Parsed as a plain string. Absent/empty for every other type.
+- **`provider` / `model` / `version`:** `type: agent`-only frontmatter keys
+  (§5.2). Each emitted verbatim (single line enforced) when non-empty, in the
+  key order above. Parsed as plain strings. Absent/empty for every other type.
 
 ### 5.1 Templates — whole-file behaviour
 
-A `template` is not a fragment inserted at the cursor; invoking **New File from
+A `template` is not a fragment inserted at the cursor; invoking **Insert
 Template** from the Explorer writes the artifact's single code block to disk as a
 real file, with `<VK-xxx>` variables resolved exactly as every other artifact
 resolves them.
@@ -264,6 +305,51 @@ resolves them.
   is containment-checked against the workspace folder before any I/O and creates
   no directory.
 
+### 5.2 Agents — provider / model / version
+
+An `agent` config records which AI it targets via three optional, **agent-only**
+free-text frontmatter keys. They are metadata only — they do not change insert or
+target-file write behaviour.
+
+~~~md
+---
+type: agent
+title: Code reviewer
+provider: Claude
+model: Opus
+version: "4.8"
+---
+~~~
+
+- **Free-text, optional.** Any of the three may be absent; an empty value is
+  **omitted**, never emitted blank. No curated dropdown — the create form renders
+  three plain text inputs, rendered for no other type.
+- **Single-line enforced.** Like `title` / `description` / `extension`, each value
+  is routed through the serializer's `safeYamlValue` so an embedded newline cannot
+  inject a sibling frontmatter key on re-parse. They are parsed as plain strings.
+- **Round-trip.** A hand-authored agent file carrying these keys preserves them
+  through `parse(serialize(x))`; the create form seeds its inputs from them.
+- **Multi-block (D4).** The agent create form reuses the multi-block machinery
+  (`form.multiBlock === true`), matching the §5 agent row.
+
+**Whole-file behaviour (Explorer → Create File).** Like a `template`, invoking an
+agent config from the Explorer **writes its code block to disk as a real file**
+with `<VK-xxx>` resolved — it does not insert at the cursor. Shared with templates
+via `writesWholeFile(type)` (`artifact-type-config.service.ts`), the single source
+for both the preview's `Create File` label and the write-vs-insert branch.
+
+- **Filename from `target:`.** The default (editable) name is seeded from the
+  `target:` frontmatter key (e.g. `CLAUDE.md`); absent, it falls back to the title.
+  `target:` is a path-injection vector — a value carrying `/`, `\`, `..`, or a NUL
+  is **rejected, never sanitised**, and the write is containment-checked against the
+  workspace folder (identical guards to the template `extension:`/typed-name path).
+- **Single-block only for the write.** A 2+ block agent is a Create-File validation
+  error (an agent config is one file), even though the create form permits authoring
+  multiple blocks (D4).
+- **No code fence required.** An agent config is markdown, so its payload is
+  normally delimited by flags (§7) rather than wrapped in a fence. Both shapes
+  parse; the write path is identical.
+
 ---
 
 ## 6. Variable Sets — storage shape
@@ -277,3 +363,185 @@ resolves them.
   are the whole set.
 - A multi-block variable file uses `## Heading` + ` ```vks ` blocks. Each
   heading is an independent sub-set with its own vars.
+
+---
+
+## 7. Flags — plain-markdown payloads
+
+A vault note *is* markdown. When the artifact's payload is itself markdown — an
+agent config, and the planned AI-prompt snippet subtype — there is nothing to
+wrap it in: a ` ``` ` fence is wrong (the payload may contain fences of its own)
+and a `##` heading would swallow the author's surrounding notes. **Flags** mark
+where the artifact starts and ends:
+
+~~~md
+---
+type: agent
+title: Code reviewer
+target: CLAUDE.md
+---
+
+Scratch notes to myself — not part of the artifact.
+
+%%oa:start%%
+# Reviewer
+
+Review <VK-repo> and report findings.
+
+```bash
+npm test
+```
+%%oa:end%%
+
+More notes, also excluded.
+~~~
+
+`%%…%%` is Obsidian's own comment syntax, so flags are **invisible in Obsidian's
+reading view** while staying plain text on disk.
+
+### 7.1 Syntax
+
+| Flag | Form |
+|---|---|
+| Start | `%%oa:start%%` — or `%%oa:start Some name%%` |
+| End | `%%oa:end%%` |
+| Visual rule (optional) | `***` on its own line, **inside** a region — dropped from the payload |
+
+- **Own line.** A flag must be the only thing on its line. Leading/trailing
+  whitespace and spaces inside the `%%…%%` are tolerated (`%% oa:start Dev %%`).
+- **Name.** Everything after `oa:start` up to the closing `%%`, trimmed. Optional.
+- **Case-sensitive**, lowercase `oa:start` / `oa:end`.
+- The syntax has exactly one owner in code: `src/services/flags.service.ts`.
+  `test/flags.service.test.ts` fails if any other `src/` file spells it out again.
+
+### 7.2 Parsing rules
+
+- **Flags beat fences.** A file containing at least one start flag takes the
+  flagged path; its ` ``` ` fences and `##` headings are payload, never structure.
+  A file with no flags parses exactly as it always did — flags are **additive**,
+  and no existing vault file changes meaning.
+- **Text outside the flags is dropped.** That is the point of the markers.
+- **Content is verbatim**, inner fences included; only blank lines at the two ends
+  are trimmed, never interior ones or leading indentation.
+- **Fenced regions are skipped while scanning**, so a prompt that *documents* the
+  flag syntax inside a ` ```md ` sample does not terminate itself. Fence matching
+  follows CommonMark: a fence closes only on the same character (` ``` ` vs `~~~`)
+  at the same length or longer.
+- **One region → single-block file** (`blocks: []`; its name is decorative, the
+  title comes from frontmatter). **Two or more → one `ParsedBlock` per region**,
+  the flag name as the block heading, so the multi-block picker and preview work
+  unchanged.
+- **`language` defaults to `markdown`** when frontmatter does not set one; an
+  explicit `language:` still wins. This is what makes `extForLang` yield `.md` for
+  a written file with no `extension:` / `target:`.
+- **Two lenient rules**, so a half-typed file still previews: an unterminated
+  start flag runs to end of file, and a second start flag while a region is open
+  is content, not a new region.
+- **`***` inside a region is chrome, not content.** The flags themselves are
+  invisible in Obsidian, so an author brackets a region with `***` horizontal
+  rules to *see* where a block begins and ends — the visual job a ` ``` ` fence
+  does for a snippet, which matters most in a multi-region prompt file. Every
+  `***` line **between a Start and an End flag** is dropped from the payload,
+  wherever it sits.
+
+~~~md
+%%oa:start Dev review%%
+***
+# Reviewer
+
+Review <VK-repo_name> before merging.
+***
+%%oa:end%%
+~~~
+→ payload: `# Reviewer\n\nReview <VK-repo_name> before merging.`
+
+  Precise rules:
+  - **Only inside a region.** A `***` before the first Start, between an End and
+    the next Start, or anywhere in a file with **no flags at all** (§7.5) is
+    ordinary markdown and is preserved.
+  - **Only `***`.** `---` is ordinary content — an author may genuinely want a
+    thematic break inside a prompt, and `---` is ambiguous in markdown anyway
+    (frontmatter at the top of a file; a setext H2 directly under a text line).
+    `***` renders as a horizontal line in every position.
+  - The whole line must be asterisks: `***`, `*****`, `  ***  ` are rules;
+    `**`, `* * *`, and `***emphasis***` are content.
+  - A `***` inside a fenced code block is content — fenced lines are never
+    scanned for markers.
+
+### 7.3 Variables
+
+`<VK-xxx>` tokens in a flagged payload are **auto-detected** — a prompt's whole
+value is its tokens, so an explicit list is not required. A ` ```vks ` fence
+supplies defaults for them and is **file-level**: put it *outside* the flags,
+since anything between them is payload.
+
+~~~md
+%%oa:start%%
+Review <VK-repo_name> on <VK-branch_name>.
+%%oa:end%%
+
+vars:
+```vks
+VK-repo_name=obsidian-artifacts
+```
+~~~
+
+**Write flagged-payload tokens in a render-safe spelling.** A flagged payload is
+*not* inside a code fence, so Obsidian parses it as markdown — and a bare
+`<VK-repo>` is a legal HTML open tag that swallows every block below it,
+including this ` ```vks ` fence. Use `<VK-repo></VK-repo>`, a lone `</VK-repo>`,
+or a name containing `_`; **all three resolve to the same variable and the same
+output** (§4.1 has the full table).
+
+This is a **rendering-only** concern: the extension parses, resolves and writes
+every spelling identically, and payloads inside a ` ``` ` fence are immune (no
+HTML is parsed there). The vault's `AgentsConf/test/*.md` examples use the
+underscore form.
+
+### 7.4 Whole-file types
+
+Flags need no special handling in the Create File flow: the region content lands
+in `code`, so `validateSingleBlock` (2+ regions → the same "one file" error) and
+`resolveOutputFileName` (`target:` for agents, extension chain for templates)
+apply to a flagged file exactly as to a fenced one. Adding the AI-prompt snippet
+subtype later requires **no extraction code** — only its `ARTIFACTS` row.
+
+**Serializer.** Flags are a read-side format today: the create form still writes
+the fenced shape, and `parse(serialize(x))` is unaffected because the serializer
+never emits flags. Hand-authored flagged files are edited through **Edit .md**
+(raw text), not re-serialized.
+
+### 7.5 Flags are optional for whole-file types
+
+A `template` or `agent` file **is** the artifact, so when it is a single block
+there is nothing to delimit — write the note and leave the flags out entirely:
+
+~~~md
+---
+type: agent
+title: Code reviewer
+target: CLAUDE.md
+---
+
+# Reviewer
+
+Be terse with <VK-repo_name>.
+
+vars:
+```vks
+VK-repo_name=my-app
+```
+~~~
+
+Precedence, strictly ordered so no existing file changes meaning:
+
+1. **Flags** — if the file has any region, that is the payload.
+2. **Code fence** — the classic shape; a ` ```vks ` fence does not count (it is
+   the defaults section, not content).
+3. **Bare body** — only for types with `writesFile` (`template`, `agent`): the
+   whole body minus its `vars:` / ` ```vks ` section, with `language: markdown`.
+
+Cursor-insert types (`snippet`, `command`, `variables`) never take rule 3 — a
+note with no fence and no flags yields no code, exactly as before. When
+multi-block support arrives for the whole-file types, flags become the way to
+mark each region; a single-region file will still be able to omit them.

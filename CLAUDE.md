@@ -9,7 +9,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (507 passing)
+npm run test           # Compile + lint + run all tests (675 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -56,7 +56,10 @@ src/
 │   ├── config.service.ts                 # THE settings reader — CONFIG_SECTION, getVaultPath(RootUri)
 │   ├── artifact-serializer.service.ts    # THE .md emitter — serializeArtifact
 │   ├── parser.service.ts                 # THE .md reader — parse*, extractVars, resolveVars, VK_TOKEN_RE
+│   ├── flags.service.ts                  # THE %%oa:start%%/%%oa:end%% syntax — extractFlaggedRegions
 │   ├── filename.service.ts               # THE slug — slugify, deriveFileName, validate* guards
+│   ├── template.service(.helpers).ts     # Whole-file types (template + agent) — resolveOutputFileName,
+│   │                                     # validateSingleBlock; helpers = path-injection/ext rules
 │   ├── artifact-patcher.service.ts       # Surgical in-place .md edits
 │   ├── artifact-writer.service.ts        # Atomic writes + isWithinRoot path-escape guard
 │   ├── vault.service.ts · context.service.ts     # Vault validation/detection; context keys
@@ -83,7 +86,7 @@ src/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
 │   └── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 507 tests. fixtures/ + snapshots/
+test/                                 # 675 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
 └── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
@@ -123,9 +126,13 @@ regression this list exists to prevent; each is held by a named guard test.
 | HTML escaping | `utils/html.ts` — `escHtml` (all five of `&<>"'`) | `webview-snippets.test.ts` — webview `esc` must match it |
 | Webview `esc`/`lbl` | `artifactPicker/webviewSnippets.ts` — `WEBVIEW_ESC_LBL_JS` | `webview-snippets.test.ts` — defined exactly once per bundle |
 | Slugs | `filename.service.ts` — `slugify` | `filename.service.test.ts` |
-| `<VK-xxx>` regex | `parser.service.ts` — `VK_TOKEN_RE` | `utils-html.test.ts` (shared-instance `lastIndex` reuse) |
+| `<VK-xxx>` regex | `parser.service.ts` — `VK_TOKEN_RE` (matches `</VK-xxx>` too) | `utils-html.test.ts` (shared-instance `lastIndex` reuse) · `vk-closing-tag.test.ts` binds the webview `vkWrap` twin |
 | Language tables | `types/constants.ts` — `LANG_ALIAS` / `LANG_FENCE` / `LANG_EXT` | `language-consistency.test.ts` |
 | Context-menu surfaces | `types/constants.ts` — each `ARTIFACTS` entry's `contexts` | `package-menus.test.ts` — pins `package.json` menus to `ARTIFACTS` |
+| Write-a-file vs insert | `types/constants.ts` — `writesFile`, read via `writesWholeFile` | `artifact-type-config.test.ts` — answer must equal the flag, every type |
+| Single-block restriction | `types/constants.ts` — `form.multiBlock`, read via `canMultiBlock` / `forcesSingleBlock` | `artifact-type-config.test.ts` — mirrors the flag, every create-form type |
+| Whole-file naming | `template.service.ts` — `resolveOutputFileName` | `template.service.test.ts` — agent `target:` verbatim vs template D3 chain |
+| Flag syntax (`%%oa:…%%`) | `flags.service.ts` — `extractFlaggedRegions` | `flags.service.test.ts` — no other `src/` file may spell the marker |
 
 **Context menus are driven by `constants.ts`, always.** An artifact's
 `contexts` field is the single source for *where* its command shows (editor /
@@ -225,6 +232,10 @@ signals a single-block file. Tokens are auto-detected by `extractVars`; a
 section whose **first** fence is ` ```vks ` is a pure sub-set, while a code
 fence *followed by* one gets defaults merged via `mergeVarDefaults` (code order
 kept, vks-only keys appended, unmatched detected vars keep `''`).
+
+The body is read one of **two** ways, chosen in a single line of
+`parseFromContent`: `readFlaggedPayload` when the file carries flags (see above),
+`readFencedPayload` — the classic behaviour, unchanged — otherwise.
 **`ARTIFACT_FILE_FORMAT.md` is the authority on all of this** — read it before
 touching the parser, the serializer, or any fixture.
 
@@ -266,6 +277,108 @@ Each `ARTIFACTS` entry drives directory creation/detection, context keys, and
 command registration. `default: true` (`Snippets`, `AgentsConf`) are auto-created
 on first vault selection; `default: false` (`Commands`, `Templates`, `Variables`)
 are detected but never auto-created.
+
+### Templates and AI Agents Config — one flow, two rows in the table
+
+`template` and `agent` are the two **whole-file** artifact types: invoking one
+from the Explorer writes a new file into the workspace (primary button reads
+**Create File**) instead of inserting at the cursor. Everything except *where the
+filename comes from* is literally the same code — treat any new
+`type === 'template'` or `type === 'agent'` literal as a bug.
+
+**How they differ** — only in three registry fields and the filename rule:
+
+| | `template` (`Templates/`) | `agent` (`AgentsConf/`) |
+|---|---|---|
+| `ARTIFACTS` row | `writesFile: true`, `multiBlock: false`, `default: false` | `writesFile: true`, `multiBlock: true`, `default: true` |
+| Type-only frontmatter | `extension:` | `provider:` / `model:` / `version:` |
+| Output filename | D3 precedence: typed → `extension:` → fence language | `target:` **verbatim** (`CLAUDE.md`, `.cursorrules`) — never extension-appended |
+
+**Shared path, file by file:**
+
+- `types/constants.ts` — `writesFile` and `form.multiBlock` are the *only*
+  declarations of this behaviour. Both flags are read through
+  `artifact-type-config.service.ts` (`writesWholeFile`, `forcesSingleBlock`,
+  `canMultiBlock`), never re-derived. `getEntry` stays the sole `ARTIFACTS`
+  traversal — the new accessors go through it too.
+- `services/template.service.ts` — owns both filename rules and the shared D1
+  single-block guard. Callers use **`resolveOutputFileName(artifact)`**, which
+  dispatches to `resolveAgentFileName` / `resolveTemplateFileName`; the panel
+  never branches on type. `validateSingleBlock(parsed, label)` is shared, the
+  human label passed in from `getTypeSingular(type)`.
+- `services/template.service.helpers.ts` — the rules *both* resolvers need:
+  `assertNoPathInjection` (hostile `target:`/`extension:` **throws**, never
+  sanitised), `carriesExtension`, `stripTrailingDots`.
+- `ui/panels/artifactPicker/preview.ts` — `handleInsert` branches once on
+  `writesWholeFile(type)` into the shared `handleCreateFile`;
+  `preview.render.ts` labels the button from the same call, so label and
+  behaviour cannot drift. `navigator.ts` routes 2+ block files with
+  `forcesSingleBlock(type)`, so a malformed multi-block template lands on the
+  single preview where the D1 error surfaces.
+- `parser.service.ts` / `artifact-serializer.service.ts` — the type-only keys are
+  just entries in `STRING_FRONTMATTER_KEYS` + `FRONTMATTER_KEY_ORDER`, all
+  emitted through `safeYamlValue` (single-line, so a newline cannot inject a
+  sibling key). Details: [`ARTIFACT_FILE_FORMAT.md` §5.2](ARTIFACT_FILE_FORMAT.md).
+- `ui/panels/artifactForm/form.html.ts` — `buildExtensionField` and
+  `buildAgentFieldsSection` both render through **`buildOptionalTextField`**, so
+  the markup and its `escHtml` seeding exist once. `form.clientJs.ts` reads all
+  four keys from one `TYPE_FIELD_IDS` list (absent input → `''`).
+
+Adding a third whole-file type is therefore a `constants.ts` row plus one branch
+in `resolveOutputFileName` — nothing else.
+
+### Flags — plain-markdown payloads (`services/flags.service.ts`)
+
+A vault note is already markdown, so an artifact whose payload *is* markdown (an
+agent config; the planned **AI-prompt** snippet subtype) has nothing to wrap it
+in — a fence is wrong because the payload may contain fences. **Flags** mark
+where the artifact starts and ends, using Obsidian's own comment syntax so they
+are invisible in reading view:
+
+```md
+notes that are not part of the artifact
+
+%%oa:start Dev%%
+Review <VK-repo>.
+
+```bash
+npm test
+```
+%%oa:end%%
+```
+
+- **`flags.service.ts` owns the syntax — nothing else may spell it.**
+  `extractFlaggedRegions(body)` is the whole API; `flags.service.test.ts` fails
+  if any other `src/` file contains the marker, doc comments included (point at
+  the service by name instead).
+- **Type-agnostic by design.** The parser applies it to every file, so the
+  AI-prompt subtype lands as an `ARTIFACTS` row with **no extraction code**.
+- **Flags beat fences**, and are purely additive: a file with no flags parses
+  exactly as before. `parser.service.ts` picks between `readFlaggedPayload` and
+  `readFencedPayload` in one line.
+- One region → single-block file; **named regions → `ParsedBlock`s** keyed by the
+  name, reusing the multi-block picker with no new UI.
+- **`***` inside a region is chrome.** Flags are invisible in Obsidian, so
+  authors bracket a region with `***` to see the block — the visual job a fence
+  does for a snippet. Every `***` line between Start and End is dropped;
+  **outside a region, and in flag-less files, it is content**. `---` is never
+  special (ambiguous with frontmatter and setext H2).
+- **Flags are optional for whole-file types.** Precedence is flags → code fence
+  → bare body, and the bare-body fallback fires **only** for `writesFile` types
+  with nothing fenced, so `snippet`/`command` behaviour is untouched.
+- Scanning **skips fenced regions** (a prompt documenting the syntax in a
+  ` ```md ` sample must not terminate itself) and defaults `language` to
+  `markdown`, which is what makes `extForLang` yield `.md` downstream.
+- The whole-file path needed **zero changes**: region content lands in `code`, so
+  `validateSingleBlock` and `resolveOutputFileName` apply unaltered.
+- **Tokens in an unfenced payload need a render-safe spelling.** `<VK-repo>` is
+  a legal HTML tag name, so Obsidian renders it as an unclosed custom element
+  that swallows every block below it (this is what broke the ` ```vks ` fence in
+  the vault examples). `<VK-repo></VK-repo>`, a lone `</VK-repo>`, or a name
+  with `_` all render fine — and all mean the **same variable**
+  ([`ARTIFACT_FILE_FORMAT.md` §4.1](ARTIFACT_FILE_FORMAT.md)).
+
+Rules, edge cases, and the vars interaction: [`ARTIFACT_FILE_FORMAT.md` §7](ARTIFACT_FILE_FORMAT.md).
 
 ### No runtime dependencies
 

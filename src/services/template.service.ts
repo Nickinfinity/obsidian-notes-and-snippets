@@ -1,17 +1,24 @@
 /**
- * Pure domain logic for the Templates-as-files feature.
+ * Pure domain logic for **every** artifact-as-a-file flow — templates and agent
+ * configs alike (`ARTIFACTS.writesFile`).
  *
- * A Template artifact is a whole file: invoking it writes its single code block
- * to disk with `<VK-xxx>` variables resolved. This module owns the two pure
- * decisions that need no `vscode`:
- *  - `resolveTemplateFileName` — the D3 extension-precedence chain
- *  - `validateTemplateBlocks`  — the D1 single-block restriction
+ * Such an artifact is a whole file: invoking it writes its single code block to
+ * disk with `<VK-xxx>` variables resolved. This module owns the pure decisions
+ * that need no `vscode`:
+ *  - `resolveOutputFileName`   — the per-type entry point callers use
+ *  - `resolveTemplateFileName` — the D3 extension-precedence chain (template)
+ *  - `resolveAgentFileName`    — `target:` used verbatim (agent)
+ *  - `validateSingleBlock`     — the D1 single-block restriction, both types
  *
- * Both are `vscode`-free so they are unit-testable without an extension host.
- * The extension helpers come from `language-map.service.ts` (the single home
- * for language↔extension mapping since W0/O1).
+ * The two resolvers differ only in *where the name comes from*; every rule they
+ * share (path-injection rejection, extension detection, trailing-dot trimming)
+ * lives once in `template.service.helpers.ts`.
+ *
+ * All exports are `vscode`-free so they are unit-testable without an extension
+ * host. Language↔extension mapping stays in `language-map.service.ts`.
  */
 import { extForLang, normalizeLangId } from './language-map.service.js';
+import { assertNoPathInjection, carriesExtension, stripTrailingDots } from './template.service.helpers.js';
 import type { ParsedArtifactFile } from '../types/parsed-artifact.types.js';
 
 /** Inputs to `resolveTemplateFileName`. All optional — precedence fills the gaps. */
@@ -31,49 +38,37 @@ export type TemplateBlockCheck =
     | { ok: true }
     | { ok: false; reason: string };
 
-// ── Security ────────────────────────────────────────────────────────────────────
-
-/** Path-injection characters/sequences that must never reach a filename segment. */
-const PATH_INJECTION_RE = /[/\\\0]|\.\./;
-
-/**
- * Rejects a value that could break out of a single path segment. `extension:`
- * and the typed filename are both attacker-influenced (plan §5.2), so a value
- * carrying a separator, a `..`, or a NUL **throws** — it is never sanitised into
- * something plausible.
- *
- * @param value - The untrusted string (typed name or frontmatter extension).
- * @param label - Human label used in the thrown message.
- * @throws {Error} When `value` contains `/`, `\`, `..`, or a NUL byte.
- *
- * @example
- * assertNoPathInjection('Button.tsx', 'filename'); // ok
- * assertNoPathInjection('../x', 'filename');        // throws
- */
-function assertNoPathInjection(value: string, label: string): void {
-    if (PATH_INJECTION_RE.test(value)) {
-        throw new Error(`Invalid ${label}: "${value}" contains a path separator, "..", or a NUL byte.`);
-    }
-}
-
-/**
- * Reports whether a name already carries a usable extension: a dot that is not
- * the first character and has at least one non-dot/-separator char after it.
- *
- * @param name - The candidate filename.
- * @returns `true` when the name ends in `.<ext>` (leading-dot dotfiles excluded).
- *
- * @example
- * carriesExtension('Button.tsx')  // true
- * carriesExtension('Makefile')    // false
- * carriesExtension('.gitignore')  // false — a dotfile, not an extension
- */
-function carriesExtension(name: string): boolean {
-    const lastDot = name.lastIndexOf('.');
-    return lastDot > 0 && lastDot < name.length - 1;
-}
-
 // ── Exports ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the output filename for **any** whole-file artifact, dispatching on
+ * its type so callers never branch on a type literal themselves.
+ *
+ * `agent` routes to `resolveAgentFileName` (the `target:` key already *is* the
+ * filename); every other whole-file type routes to `resolveTemplateFileName`
+ * (D3 extension precedence). Both share the same fallback base — the artifact
+ * title, else its vault file name — and both throw rather than sanitise a
+ * hostile frontmatter value.
+ *
+ * @param artifact - The parsed artifact about to be written to the workspace.
+ * @returns The default filename to seed the name prompt with.
+ * @throws {Error} When `target:`/`extension:`/the fallback carries a path-injection char.
+ *
+ * @example
+ * resolveOutputFileName(agentArtifact);    // → 'CLAUDE.md'   (from target:)
+ * resolveOutputFileName(templateArtifact); // → 'Button.tsx'  (from extension:/language)
+ */
+export function resolveOutputFileName(artifact: ParsedArtifactFile): string {
+    const fallbackBase = artifact.frontmatter.title || artifact.fileName;
+    if (artifact.frontmatter.type === 'agent') {
+        return resolveAgentFileName({ target: artifact.frontmatter.target, fallbackBase });
+    }
+    return resolveTemplateFileName({
+        frontmatterExt: artifact.frontmatter.extension,
+        langId:         artifact.frontmatter.language,
+        fallbackBase,
+    });
+}
 
 /**
  * Resolves the output filename for a template following D3 precedence:
@@ -108,10 +103,41 @@ export function resolveTemplateFileName(args: TemplateFileNameArgs): string {
 
     // ── Compose base + resolved extension ─────────────────────────────────────
     const rawBase = typed !== '' ? typed : (args.fallbackBase?.trim() ?? '');
-    const base = rawBase.replace(/\.+$/, '') || 'template';
+    const base = stripTrailingDots(rawBase) || 'template';
 
     const ext = resolveExtension(fmExt, args.langId);
     return ext !== '' ? `${base}.${ext}` : base;
+}
+
+/**
+ * Resolves the output filename for an **agent** create-file flow.
+ *
+ * Unlike a template, an agent's `target:` frontmatter (`CLAUDE.md`, `.cursorrules`,
+ * `AGENTS.md`) **is already the complete intended filename** — it must be used
+ * verbatim, never routed through the extension-appending chain (which would turn a
+ * dotfile like `.cursorrules` into `.cursorrules.md`). When `target` is absent the
+ * name falls back to the title/fileName, defaulting to a `.md` extension since agent
+ * configs are markdown. `target` and the fallback base are path-injection vectors
+ * and **throw** on a separator / `..` / NUL rather than being sanitised.
+ *
+ * @param args - `target` (frontmatter, may be empty) and `fallbackBase` (title/fileName).
+ * @returns The resolved filename.
+ * @throws {Error} When `target` or the fallback base carries a path-injection char.
+ *
+ * @example
+ * resolveAgentFileName({ target: 'CLAUDE.md' })              // 'CLAUDE.md'
+ * resolveAgentFileName({ target: '.cursorrules' })           // '.cursorrules'
+ * resolveAgentFileName({ target: '', fallbackBase: 'Claude reviewer' }) // 'Claude reviewer.md'
+ */
+export function resolveAgentFileName(args: { target?: string; fallbackBase?: string }): string {
+    const target = args.target?.trim() ?? '';
+    if (target !== '') {
+        assertNoPathInjection(target, 'target');
+        return target;
+    }
+    const base = stripTrailingDots(args.fallbackBase?.trim() ?? '') || 'agent';
+    assertNoPathInjection(base, 'filename');
+    return carriesExtension(base) ? base : `${base}.md`;
 }
 
 /**
@@ -140,23 +166,29 @@ function resolveExtension(fmExt: string, langId: string | undefined): string {
 }
 
 /**
- * Enforces D1: a template is a single code block. A parsed file with two or more
- * `##` blocks is a validation error (surfaced in the preview, no write happens).
- * An empty `blocks` array is the classic single-block shape — always ok.
+ * Enforces D1: a file-writing artifact is a single code block. A parsed file
+ * with two or more `##` blocks is a validation error (surfaced in the preview,
+ * no write happens). An empty `blocks` array is the classic single-block shape —
+ * always ok.
  *
- * @param parsed - The parsed template artifact.
+ * Shared verbatim by `template` and `agent` — a written file is one file either
+ * way — so the only per-type variation is the human label, passed in by the
+ * caller from `getTypeSingular(type)` rather than hardcoded here.
+ *
+ * @param parsed - The parsed file-writing artifact (template or agent).
+ * @param label  - Singular noun for the message (defaults to `'template'`).
  * @returns `{ ok: true }` for 0–1 blocks; `{ ok: false, reason }` naming the count otherwise.
  *
  * @example
- * validateTemplateBlocks({ ...parsed, blocks: [] })          // { ok: true }
- * validateTemplateBlocks({ ...parsed, blocks: [b1, b2] })    // { ok: false, reason: '…2 blocks…' }
+ * validateSingleBlock({ ...parsed, blocks: [] })                       // { ok: true }
+ * validateSingleBlock({ ...parsed, blocks: [b1, b2] }, 'agent config') // { ok: false, reason: '…2 blocks…' }
  */
-export function validateTemplateBlocks(parsed: ParsedArtifactFile): TemplateBlockCheck {
+export function validateSingleBlock(parsed: ParsedArtifactFile, label = 'template'): TemplateBlockCheck {
     const count = parsed.blocks.length;
     if (count > 1) {
         return {
             ok: false,
-            reason: `A template must be a single code block, but this file has ${count} blocks. Split it into separate template files.`,
+            reason: `A ${label} must be a single code block, but this file has ${count} blocks. Split it into separate ${label} files.`,
         };
     }
     return { ok: true };

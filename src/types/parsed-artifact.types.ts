@@ -43,6 +43,12 @@ export interface ParsedFrontmatter {
      * dot; a value carrying a path separator is rejected, never sanitised.
      */
     extension?: string;
+    /** AI provider that authored/owns this config — **`type: agent` only** (e.g. `Claude`). */
+    provider?: string;
+    /** Model family for the agent config — **`type: agent` only** (e.g. `Opus`). */
+    model?: string;
+    /** Model version string — **`type: agent` only** (e.g. `4.8`). */
+    version?: string;
 }
 
 /**

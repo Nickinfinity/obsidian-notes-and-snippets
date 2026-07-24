@@ -454,7 +454,7 @@ suite('renderPreviewHtml — Phase 6 render-level golden', () => {
  */
 suite('renderPreviewHtml — Create File button for templates', () => {
 
-    function render(type: 'snippet' | 'template'): string {
+    function render(type: 'snippet' | 'template' | 'agent'): string {
         const artifact: ParsedArtifactFile = {
             filePath:     '/vault/Templates/comp.md',
             fileName:     'comp',
@@ -474,7 +474,13 @@ suite('renderPreviewHtml — Create File button for templates', () => {
         assert.ok(!/id="insertBtn">Insert<\/button>/.test(html));
     });
 
-    test('a non-template artifact still labels it "Insert"', () => {
+    test('an agent artifact labels the primary button "Create File"', () => {
+        const html = render('agent');
+        assert.match(html, /id="insertBtn">Create File<\/button>/);
+        assert.ok(!/id="insertBtn">Insert<\/button>/.test(html));
+    });
+
+    test('a cursor-insert artifact still labels it "Insert"', () => {
         const html = render('snippet');
         assert.match(html, /id="insertBtn">Insert<\/button>/);
         assert.ok(!/Create File/.test(html));

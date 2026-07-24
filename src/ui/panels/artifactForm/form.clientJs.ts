@@ -263,9 +263,22 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
     });
   }
 
-  // Template-only extension field — flag the form dirty when it changes.
-  const extInput = document.getElementById('extension');
-  if (extInput) { extInput.addEventListener('input', markDirty); }
+  // Type-specific frontmatter inputs: extension (template), provider/model/
+  // version (agent). Only the active type's inputs exist in the DOM; the rest
+  // are null. One list drives both the dirty listeners and extractModel below,
+  // so a new type-specific key is a single-line change here.
+  const TYPE_FIELD_IDS = ['extension', 'provider', 'model', 'version'];
+
+  TYPE_FIELD_IDS.forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) { el.addEventListener('input', markDirty); }
+  });
+
+  /** Trimmed value of a type-specific input, or '' when absent for this type. */
+  function readTypeField(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  }
 
   // ── Model extraction ─────────────────────────────────────────────────────
   function extractModel() {
@@ -273,9 +286,11 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
     const title     = titleInput ? titleInput.value : '';
     const descEl    = document.getElementById('description');
     const desc      = descEl ? descEl.value : '';
-    // Template-only extension field; absent (null) for every other type → ''.
-    const extEl     = document.getElementById('extension');
-    const extension = extEl ? extEl.value.trim() : '';
+    // Type-specific keys — '' whenever the input is absent for this type.
+    const extension = readTypeField('extension');
+    const provider  = readTypeField('provider');
+    const model     = readTypeField('model');
+    const version   = readTypeField('version');
     const blockEls  = allCards();
     let blocks;
     if (blockEls.length === 0) {
@@ -304,7 +319,7 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
         };
       });
     }
-    return { type: type, title: title, description: desc, extension: extension, tags: tags.slice(), blocks: blocks };
+    return { type: type, title: title, description: desc, extension: extension, provider: provider, model: model, version: version, tags: tags.slice(), blocks: blocks };
   }
 
   function extractVarsForBlock(blockIndex) {

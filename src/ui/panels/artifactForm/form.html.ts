@@ -147,7 +147,7 @@ function buildFrontmatterSection(model: ArtifactFormModel): string {
   <label class="slabel" for="description">Description</label>
   <textarea id="description" class="form-input form-textarea" rows="2" placeholder="Optional description">${descVal}</textarea>
 </div>
-${buildExtensionField(model)}<div class="form-section">
+${buildExtensionField(model)}${buildAgentFieldsSection(model)}<div class="form-section">
   <div class="slabel">Tags</div>
   <div class="tags-row" id="tags-row">
 ${chips}    <input type="text" id="tag-input" class="tag-input" placeholder="Add tag…">
@@ -170,12 +170,57 @@ ${chips}    <input type="text" id="tag-input" class="tag-input" placeholder="Add
  */
 function buildExtensionField(model: ArtifactFormModel): string {
     if (model.type !== 'template') { return ''; }
-    const extVal = escHtml(model.extension ?? '');
+    return buildOptionalTextField('extension', 'File extension', model.extension, 'e.g. .tsx — overrides the fence language');
+}
+
+/**
+ * Builds one optional single-line frontmatter input — the shape every
+ * type-specific key uses (template `extension`, agent `provider`/`model`/
+ * `version`).
+ *
+ * Exists so those keys cannot drift apart in markup or, worse, in escaping: the
+ * seed crosses the webview boundary, so it passes `escHtml` **here**, once, for
+ * every caller.
+ *
+ * @param id          - Input element id; also the posted model key.
+ * @param label       - Field label, rendered before the `(optional)` hint.
+ * @param value       - Current model value (may be `undefined` for a new artifact).
+ * @param placeholder - Placeholder text shown when empty.
+ * @returns The form-section HTML for that one input.
+ *
+ * @example
+ * buildOptionalTextField('provider', 'Provider', 'Claude', 'e.g. Claude') // → '<div class="form-section">…'
+ */
+function buildOptionalTextField(id: string, label: string, value: string | undefined, placeholder: string): string {
+    const safeVal = escHtml(value ?? '');
     return `<div class="form-section">
-  <label class="slabel" for="extension">File extension <span class="muted">(optional)</span></label>
-  <input type="text" id="extension" class="form-input" value="${extVal}" placeholder="e.g. .tsx — overrides the fence language">
+  <label class="slabel" for="${id}">${label} <span class="muted">(optional)</span></label>
+  <input type="text" id="${id}" class="form-input" value="${safeVal}" placeholder="${placeholder}">
 </div>
 `;
+}
+
+/**
+ * Builds the AI-provenance fields — **agents only**. `provider`, `model`, and
+ * `version` are agent-specific frontmatter keys, so the inputs appear for no
+ * other type; every other type gets an empty string here and never posts them.
+ *
+ * Rendered through the same `buildOptionalTextField` the template-only
+ * `extension` key uses, so the markup and the `escHtml` seeding of these
+ * webview-bound values are literally the same code, not a parallel copy.
+ *
+ * @param model - Form model (its `type` gates the fields, the three keys seed them).
+ * @returns The agent form-section HTML, or `''` for non-agent types.
+ *
+ * @example
+ * buildAgentFieldsSection({ type: 'agent', provider: 'Claude', ... }) // → '<div class="form-section">…'
+ * buildAgentFieldsSection({ type: 'snippet', ... })                   // → ''
+ */
+function buildAgentFieldsSection(model: ArtifactFormModel): string {
+    if (model.type !== 'agent') { return ''; }
+    return buildOptionalTextField('provider', 'Provider', model.provider, 'e.g. Claude')
+        + buildOptionalTextField('model', 'Model', model.model, 'e.g. Opus')
+        + buildOptionalTextField('version', 'Version', model.version, 'e.g. 4.8');
 }
 
 /**

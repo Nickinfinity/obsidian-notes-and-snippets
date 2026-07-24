@@ -80,7 +80,7 @@ export function registerInsertCommands(context: vscode.ExtensionContext): void {
         const commandId = artifactCommandId(artifact.dir);
 
         // VS Code passes (uri, uris[]) to an Explorer context-menu command. Forward
-        // the invoked URI so the Template "New File from Template" flow can resolve
+        // the invoked URI so the Template "Insert Template" flow can resolve
         // its destination (D2); multi-select uses the first entry. Non-template
         // commands are invoked without a URI and openArtifactPicker only consults
         // destUri in the template create-file path — their behaviour is unchanged.

@@ -3,6 +3,7 @@ import { escHtml, styleLinkTags } from '../../../utils/html.js';
 import { buildCodeBlockHtml } from './codeBlock.js';
 import { PREVIEW_CLIENT_JS } from './preview.clientJs.js';
 import { labelForVar, popupShell } from './preview.helpers.js';
+import { writesWholeFile } from '../../../services/artifact-type-config.service.js';
 
 // ── Var-merge helper ─────────────────────────────────────────────────────────
 
@@ -64,10 +65,11 @@ export function renderPreviewHtml(
     const target   = a.frontmatter.target ? `<span class="pill">target: ${e(a.frontmatter.target)}</span>` : '';
     const tagsHtml = (a.frontmatter.tags ?? []).map(t => `<span class="tag">${e(t)}</span>`).join('');
 
-    // Templates write a whole file (Create File); every other type inserts at the
-    // cursor (Insert). This ternary is the ONLY per-type rendering difference — the
-    // byte-exact golden for a snippet is the tripwire that it did not leak wider.
-    const primaryLabel = a.frontmatter.type === 'template' ? 'Create File' : 'Insert';
+    // Templates and agent configs write a whole file (Create File); every other
+    // type inserts at the cursor (Insert). `writesWholeFile` is the ONLY per-type
+    // rendering difference and the single source shared with the insert handler —
+    // the byte-exact golden for a snippet is the tripwire that it did not leak wider.
+    const primaryLabel = writesWholeFile(a.frontmatter.type) ? 'Create File' : 'Insert';
 
     const inputsHtml = a.vars.length > 0
         ? a.vars.map(v => {

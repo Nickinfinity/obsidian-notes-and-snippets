@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-test-nonce-abc123'; style-src https://test-csp-source;">
+<link rel="stylesheet" href="https://test-css-uri/styles.css">
+</head>
+<body class="form-body">
+<div class="form-panel">
+<div class="form-section">
+  <label class="slabel" for="title">Title</label>
+  <input type="text" id="title" class="form-input" value="Code reviewer" placeholder="Artifact title">
+</div>
+<div class="form-section">
+  <label class="slabel" for="description">Description</label>
+  <textarea id="description" class="form-input form-textarea" rows="2" placeholder="Optional description"></textarea>
+</div>
+<div class="form-section">
+  <label class="slabel" for="provider">Provider <span class="muted">(optional)</span></label>
+  <input type="text" id="provider" class="form-input" value="Claude" placeholder="e.g. Claude">
+</div>
+<div class="form-section">
+  <label class="slabel" for="model">Model <span class="muted">(optional)</span></label>
+  <input type="text" id="model" class="form-input" value="Opus" placeholder="e.g. Opus">
+</div>
+<div class="form-section">
+  <label class="slabel" for="version">Version <span class="muted">(optional)</span></label>
+  <input type="text" id="version" class="form-input" value="4.8" placeholder="e.g. 4.8">
+</div>
+<div class="form-section">
+  <div class="slabel">Tags</div>
+  <div class="tags-row" id="tags-row">
+    <input type="text" id="tag-input" class="tag-input" placeholder="Add tag…">
+  </div>
+</div>
+<div id="blocks-area" class="blocks-area" data-lang-mode="free" data-default-lang="" data-type="agent" data-singular="agent config">
+<div class="block" data-block-index="0">
+<div class="field-row lang-row">
+  <label class="slabel" for="block-0-lang">Language</label>
+  <select id="block-0-lang" class="lang-select" data-block="0">
+    <option value="">Plain text</option>
+    <option value="bash">bash</option>
+    <option value="css">css</option>
+    <option value="dockerfile">dockerfile</option>
+    <option value="html">html</option>
+    <option value="javascript">javascript</option>
+    <option value="json">json</option>
+    <option value="jsx">jsx</option>
+    <option value="markdown">markdown</option>
+    <option value="python">python</option>
+    <option value="rust">rust</option>
+    <option value="shell">shell</option>
+    <option value="sql">sql</option>
+    <option value="tsx">tsx</option>
+    <option value="typescript">typescript</option>
+    <option value="yaml">yaml</option>
+  </select>
+</div>
+<div class="block-code">
+<pre class="mock-code-block" data-lang="md">You are a reviewer.</pre>
+</div>
+
+</div>
+</div>
+<button id="add-block-btn" class="add-block-btn">+ Add additional agent config</button>
+<div class="form-footer">
+  <button id="save-btn" class="btn btn-primary">Save</button>
+  <button id="cancel-btn" class="btn">Cancel</button>
+  <button id="delete-btn" class="btn btn-danger">Delete entire agent config</button>
+</div>
+</div>
+
+</body>
+</html>

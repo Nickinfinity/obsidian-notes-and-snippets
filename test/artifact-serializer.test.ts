@@ -323,7 +323,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
     test('FRONTMATTER_KEY_ORDER matches canonical order from spec', () => {
         assert.deepStrictEqual(
             Array.from(FRONTMATTER_KEY_ORDER),
-            ['type', 'title', 'description', 'language', 'extension', 'tags', 'env', 'target'],
+            ['type', 'title', 'description', 'language', 'extension', 'provider', 'model', 'version', 'tags', 'env', 'target'],
         );
     });
 });

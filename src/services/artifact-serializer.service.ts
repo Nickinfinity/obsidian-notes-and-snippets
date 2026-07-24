@@ -12,10 +12,10 @@ import { getDefaultLanguage, getLanguageMode } from './artifact-type-config.serv
  * `target`) sit at the end so future additions append cleanly.
  *
  * @example
- * FRONTMATTER_KEY_ORDER // ['type','title','description','language','extension','tags','env','target']
+ * FRONTMATTER_KEY_ORDER // ['type','title','description','language','extension','provider','model','version','tags','env','target']
  */
 export const FRONTMATTER_KEY_ORDER: readonly string[] = [
-    'type', 'title', 'description', 'language', 'extension', 'tags', 'env', 'target',
+    'type', 'title', 'description', 'language', 'extension', 'provider', 'model', 'version', 'tags', 'env', 'target',
 ];
 
 // ── Public export ─────────────────────────────────────────────────────────────
@@ -85,6 +85,19 @@ function serializeFrontmatter(model: ArtifactFormModel, language: string | undef
     // path-injection rejection, not the serializer.
     if (model.extension !== undefined && model.extension !== '') {
         lines.push(`extension: ${safeYamlValue(model.extension)}`);
+    }
+
+    // provider / model / version — agent-only; single-line enforced via
+    // safeYamlValue exactly like title/description/extension, so an embedded
+    // newline can never inject a sibling frontmatter key on re-parse.
+    if (model.provider !== undefined && model.provider !== '') {
+        lines.push(`provider: ${safeYamlValue(model.provider)}`);
+    }
+    if (model.model !== undefined && model.model !== '') {
+        lines.push(`model: ${safeYamlValue(model.model)}`);
+    }
+    if (model.version !== undefined && model.version !== '') {
+        lines.push(`version: ${safeYamlValue(model.version)}`);
     }
 
     // tags — omitted when empty

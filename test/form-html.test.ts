@@ -201,3 +201,50 @@ suite('buildFormHtml — template', () => {
         assert.ok(!buildFormHtml({ ...ARGS, model: snippet }).includes('id="extension"'));
     });
 });
+
+// ── T3: agent create form ──────────────────────────────────────────────────────
+
+/**
+ * AI Agents Config (T3): the create form gains three agent-only, free-text
+ * frontmatter inputs — provider / model / version — rendered for no other type.
+ */
+suite('buildFormHtml — agent', () => {
+
+    function agentModel(over: Partial<ArtifactFormModel> = {}): ArtifactFormModel {
+        return {
+            type:        'agent',
+            title:       'Code reviewer',
+            description: '',
+            provider:    'Claude',
+            model:       'Opus',
+            version:     '4.8',
+            tags:        [],
+            blocks: [
+                { heading: '', description: '', language: 'md', code: 'You are a reviewer.', vars: [] },
+            ],
+            ...over,
+        };
+    }
+
+    test('renders agent-only provider/model/version inputs seeded from the model', () => {
+        const html = buildFormHtml({ ...ARGS, model: agentModel() });
+        assert.ok(html.includes('id="provider"'), 'provider input present');
+        assert.ok(html.includes('value="Claude"'), 'provider seeded');
+        assert.ok(html.includes('id="model"'), 'model input present');
+        assert.ok(html.includes('value="Opus"'), 'model seeded');
+        assert.ok(html.includes('id="version"'), 'version input present');
+        assert.ok(html.includes('value="4.8"'), 'version seeded');
+
+        snapshot('agent-single-block', html);
+    });
+
+    test('a snippet form has no provider/model/version inputs', () => {
+        const snippet: ArtifactFormModel = {
+            type: 'snippet', title: 'S', description: '', tags: [],
+            blocks: [{ heading: '', description: '', language: 'javascript', code: 'x', vars: [] }],
+        };
+        const html = buildFormHtml({ ...ARGS, model: snippet });
+        assert.ok(!html.includes('id="provider"'), 'no provider input for a snippet');
+        assert.ok(!html.includes('id="version"'), 'no version input for a snippet');
+    });
+});

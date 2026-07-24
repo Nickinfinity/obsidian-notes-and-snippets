@@ -63,6 +63,15 @@ export interface ArtifactFormModel {
      * file's name is resolved (D3). Absent/empty for every other type.
      */
     extension?: string;
+    /**
+     * AI provider — **`type: agent` only**. Emitted as frontmatter `provider:`
+     * when non-empty (single-line enforced). Absent/empty for every other type.
+     */
+    provider?: string;
+    /** AI model family — **`type: agent` only**. Emitted as `model:` when non-empty. */
+    model?: string;
+    /** AI model version — **`type: agent` only**. Emitted as `version:` when non-empty. */
+    version?: string;
     /** Content blocks — at least one entry is always required. */
     blocks: ArtifactFormBlock[];
 }
