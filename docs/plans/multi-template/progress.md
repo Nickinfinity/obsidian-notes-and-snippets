@@ -21,9 +21,9 @@ correct this line if the real number differs.
 |------|------|-------|--------|-----------|------|---------------|-------|
 | O1 — Freeze contract types | 0 | orchestrator | done | 675 | pass | n/a | `multi-index.types.ts` + `index?: boolean` + `paths?: string[]`; no `vscode` in `src/types/` |
 | O2 — Parser reads `index:` / `paths:` | 0 | orchestrator | done | 675 → 679 | pass | n/a | shared `parseInlineArray`; **D11 guard proven red** by temporarily emitting `index` (msg: *"read-side only (plan D11)…"*), then reverted |
-| T1 — Index domain service 🔒 | 1 | worker | todo | — | — | 0 | **security-critical** — `safeRelPath` is the single rejection authority |
-| T2 — `BatchGate` | 1 | worker | todo | — | — | 0 | pure promise gate, `vscode` type-only |
-| T3 — Extract Create File flow (D12) | 1 | worker | todo | — | — | 0 | **pure refactor** — feature code in this diff is a rejection |
+| T1 — Index domain service 🔒 | 1 | worker | done | 679 → 739 | pass | 0 (APPROVE) | 60 tests; hostile inputs asserted through **both** callers; reviewer's trace confirms one `safeRelPath`, no decode step. Orchestrator hardening: `CONTROL_CHAR_RE` widened to C1 (`\x7F-\x9F`) |
+| T2 — `BatchGate` | 1 | worker | done | 739 → 746 | pass | 0 (APPROVE) | `import type { Uri }` verified; `settle` nulls the resolver **before** resolving, so idempotence holds |
+| T3 — Extract Create File flow (D12) | 1 | worker | done | 746 → 746 | pass | 0 (APPROVE) | `preview.ts` **427 → 320**; goldens byte-identical; reviewer read every JSDoc hunk and confirmed comment-only |
 | T4 — Preview batch hooks | 2 | worker | todo | — | — | 0 | includes the index-guard hole (F7); F5 pass |
 | T5 — Destination chooser (D9) | 2 | worker | todo | — | — | 0 | reuses `pickDestFolder`; F5 pass |
 | T6 — `MultiIndexRunner` 🔒 | 2 | worker | todo | — | — | 0 | **security-critical**; owns its own integration test (F3) |
@@ -38,6 +38,7 @@ correct this line if the real number differs.
 |------|------|---------|--------|-----------|-------|
 | 2026-07-24 | — | `rm -rf dist && npm test && npx tsc --noEmit` | pass | **675** | baseline confirmed — matches `CLAUDE.md` |
 | 2026-07-24 | 0 | `rm -rf dist && npm test && npx tsc --noEmit` | pass | **679** (+4) | O1 + O2 integrated; 4 new tests in `frontmatter-keys.test.ts` |
+| 2026-07-24 | 1 | `rm -rf dist && npm test && npx tsc --noEmit` | pass | **746** (+67) | T1 +60, T2 +7, T3 ±0; reviewer re-ran the gate independently |
 
 ---
 
@@ -83,7 +84,9 @@ Orchestrator arbitration, `ESCALATE` resolutions, and any deviation from
 
 | When | Task | Decision | Why |
 |------|------|----------|-----|
-| — | — | — | — |
+| 2026-07-24 | T4 (forward) | `preview.ts` landed at **exactly 320/320** after T3, leaving 20 lines for T4's ≤340 budget. T4 is told: the budget **stands**; if the hooks do not fit, push helper bodies into `preview.createFile.ts` (which T4 also owns) rather than raise it. | The budget is the point of D12 — the PR checklist asserts `preview.ts` ends the branch smaller than it started (427). Raising it to fit would undo the task that was run to avoid exactly that. |
+| 2026-07-24 | T1 | Orchestrator widened `CONTROL_CHAR_RE` to `[\x00-\x1F\x7F-\x9F]` after the reviewer's APPROVE named C1 controls as passing. | §3.1 says "a NUL or **other** control character"; C1 is a control range. Unexploitable (the value only becomes a Uri segment), so it was a one-character spec-conformance fix, not a re-dispatch. |
+| 2026-07-24 | Wave 1+ dispatch | Workers run **sequentially within a wave**, not in parallel. Wave boundaries, task ownership and the review loop are unchanged. | The gate is not concurrency-safe in this repo: `dist/` is one shared output dir (`rm -rf dist` mid-run breaks a sibling) and `.vscode-test.mjs` pins a single `--user-data-dir=/tmp/oa-vsct`, so two extension hosts collide. Parallel authoring with a deferred gate would cost each worker its TDD red→green proof, which is the more valuable half. |
 
 ---
 

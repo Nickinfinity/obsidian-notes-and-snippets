@@ -1,11 +1,7 @@
 import * as vscode from 'vscode';
-import { parseFromContent, resolveVars } from '../../../services/parser.service.js';
+import { parseFromContent } from '../../../services/parser.service.js';
 import { renderCodeHtml, renderCodeRowsHtml } from '../../../services/render.service.js';
-import { validateSingleBlock, resolveOutputFileName } from '../../../services/template.service.js';
-import { writesWholeFile, getTypeSingular } from '../../../services/artifact-type-config.service.js';
-import { writeTemplateFile } from '../../../services/template-writer.service.js';
-import { resolveDestination } from '../../../services/template-destination.service.js';
-import { validateTargetFileName } from '../../../services/filename.service.js';
+import { writesWholeFile } from '../../../services/artifact-type-config.service.js';
 import { patchFrontmatterField, patchVarDefaults, type BlockRef } from '../../../services/artifact-patcher.service.js';
 import { PreviewModeController, type SectionKey } from '../../../services/preview-mode.service.js';
 import { getNonce } from '../../../utils/helpers.js';
@@ -16,6 +12,7 @@ import { renderPreviewHtml, renderMultiBlockPreviewHtml, renderPopupEmptyHtml, m
 import { FullEditController } from './fullEditor.js';
 import { BlockEditController } from './blockEditor.js';
 import { VarSetController } from './varSetController.js';
+import { runCreateFileFlow } from './preview.createFile.js';
 
 // Re-export the adapter so the navigator does not need to import preview.helpers directly.
 export { blockAsArtifact } from './preview.helpers.js';
@@ -39,13 +36,11 @@ export interface PreviewCallbacks {
 
 /**
  * Owns the popup `WebviewPanel` lifecycle, all preview HTML rendering, the
- * webview ↔ extension message protocol, and the embedded `FullEditController`.
- *
+ * webview ↔ extension message protocol, and the embedded sub-controllers.
  * Created lazily by the navigator once the user starts hovering an item.
  *
  * @example
- * const ctrl = new PreviewPanelController({ extensionUri, rootFs, targetEditor, setCache, onDispose, closePicker });
- * await ctrl.showPreview(artifact);
+ * new PreviewPanelController({ extensionUri, rootFs, targetEditor, setCache, onDispose, closePicker }).showPreview(artifact);
  */
 export class PreviewPanelController {
     private panel: vscode.WebviewPanel | undefined;
@@ -93,10 +88,8 @@ export class PreviewPanelController {
 
     /**
      * Brings the popup tab into view in its column.
-     *
-     * @param preserveFocus - When `true`, keeps focus on the QuickPick (used during
-     *                        navigation).  Pass `false` after the picker hides to
-     *                        focus the panel for interaction.
+     * @param preserveFocus - `true` keeps focus on the QuickPick (during navigation);
+     *                        `false` focuses the panel once the picker hides.
      */
     reveal(preserveFocus: boolean): void {
         this.panel?.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Beside, preserveFocus);
@@ -109,11 +102,9 @@ export class PreviewPanelController {
 
     /**
      * Creates (once per session) or updates the popup in interactive preview mode.
-     *
      * @param artifact - Single-block artifact (or block-adapted artifact) to display.
-     * @param blockRef - Which source `.md` code fence the Edit Block action targets.
-     *                   Defaults to `{ kind: 'single' }`; pass `{ kind: 'multi', heading }`
-     *                   when previewing a block of a multi-block file.
+     * @param blockRef - Source `.md` fence the Edit Block action targets; defaults
+     *                   to `{ kind: 'single' }`.
      */
     showPreview(artifact: ParsedArtifactFile, blockRef?: BlockRef): void {
         this.fullEdit.teardown();
@@ -134,7 +125,6 @@ export class PreviewPanelController {
 
     /**
      * Creates (once per session) or updates the popup with a stacked multi-block preview.
-     *
      * @param artifact - Multi-block artifact to preview.
      */
     showMultiBlockPreview(artifact: ParsedArtifactFile): void {
@@ -234,9 +224,8 @@ export class PreviewPanelController {
     }
 
     /**
-     * Opens just the previewed code block as a temp file in extension storage.
-     * Saving that file patches the matching code fence in the source `.md` and
-     * refreshes the preview via a `fileUpdated` round-trip.
+     * Opens just the previewed code block as a temp file in extension storage;
+     * saving it patches the matching fence in the source `.md` (`fileUpdated`).
      */
     private async handleEditBlock(): Promise<void> {
         const artifact = this.currentArtifact;
@@ -280,10 +269,8 @@ export class PreviewPanelController {
         const artifact = this.currentArtifact;
         if (!artifact) { return; }
 
-        // Templates and agent configs write a whole file into the workspace instead
-        // of inserting at the cursor. The webview keeps posting the existing `insert`
-        // message; the branch happens here so preview.clientJs.ts / webview-messages
-        // need no edit. `writesWholeFile` is the single source shared with the label.
+        // Templates/agent configs write a whole file instead of inserting at the
+        // cursor; `writesWholeFile` is the single source shared with the label.
         if (writesWholeFile(artifact.frontmatter.type)) {
             void this.handleCreateFile(msg, artifact);
             return;
@@ -299,118 +286,24 @@ export class PreviewPanelController {
         this.cb.closePicker();
     }
 
-    /**
-     * Create File flow for `type: template`: enforce D1, resolve the destination
-     * and filename, substitute variables, write into the workspace, then open the
-     * new file. Any rejection (bad block count, cancelled prompt, containment
-     * failure) stops the flow without writing.
-     */
+    /** Routes to the extracted Create File flow (D12); `destDir: undefined` +
+     *  `openAfterWrite: true` reproduces prior interactive behaviour exactly. */
     private async handleCreateFile(msg: Record<string, unknown>, artifact: ParsedArtifactFile): Promise<void> {
-        const type = artifact.frontmatter.type;
+        const code = this.resolveInsertCode(msg, artifact);
+        const vars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
 
-        // ── D1: single-block only (template) / one config file (agent) ────────
-        const blockCheck = validateSingleBlock(artifact, getTypeSingular(type));
-        if (!blockCheck.ok) {
-            void vscode.window.showErrorMessage(`Obsidian Artifacts: ${blockCheck.reason}`);
-            return;
-        }
-
-        // ── Destination (D2) + containment root ───────────────────────────────
-        const destDir = await resolveDestination(this.cb.destUri);
-        if (!destDir) { return; }  // no workspace open, or the folder picker was cancelled
-        const workspaceRoot = vscode.workspace.getWorkspaceFolder(destDir)?.uri;
-        if (!workspaceRoot) {
-            void vscode.window.showErrorMessage('Obsidian Artifacts: Destination is not inside an open workspace folder.');
-            return;
-        }
-
-        // ── Default filename — throws on a hostile frontmatter value ──────────
-        // Per-type naming (template = D3 extension precedence, agent = `target:`
-        // verbatim) is the service's decision, not the panel's; a hostile value
-        // throws here rather than being sanitised into a plausible path.
-        let defaultName: string;
-        try {
-            defaultName = resolveOutputFileName(artifact);
-        } catch (err) {
-            void vscode.window.showErrorMessage(`Obsidian Artifacts: ${(err as Error).message}`);
-            return;
-        }
-
-        const fileName = await this.askFileName(defaultName);
-        if (fileName === undefined) { return; }  // cancelled
-
-        // ── Resolve variables into the file content, then write ───────────────
-        const code    = this.resolveInsertCode(msg, artifact);
-        const vars    = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
-        const content = resolveVars(code, vars);
-
-        const finalPath = await this.writeWithCollisionHandling(workspaceRoot, destDir, fileName, content);
-        if (finalPath === undefined) { return; }  // cancelled or errored (message already shown)
-
-        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(finalPath));
-        await vscode.window.showTextDocument(doc);
-        this.dispose();
-        this.cb.closePicker();
-    }
-
-    /**
-     * Prompts for a target filename, seeded with `defaultValue` and validated
-     * live by `validateTargetFileName` (workspace-target rules, T3).
-     *
-     * @param defaultValue - Prefilled, fully-editable filename (raw title + ext, P5).
-     * @returns The confirmed filename, or `undefined` when the user cancels.
-     */
-    private async askFileName(defaultValue: string): Promise<string | undefined> {
-        return vscode.window.showInputBox({
-            prompt:         'File name for the new file',
-            value:          defaultValue,
-            ignoreFocusOut: true,
-            validateInput:  v => {
-                const r = validateTargetFileName(v);
-                return r.ok ? undefined : r.reason;
-            },
+        const result = await runCreateFileFlow({
+            artifact, code, vars, destDir: undefined, destUri: this.cb.destUri, openAfterWrite: true,
         });
-    }
-
-    /**
-     * Writes the template file, resolving collisions interactively: on an existing
-     * file the user chooses Overwrite (retry with `force`), Rename (re-prompt), or
-     * Cancel. Containment/error results surface a message and abort.
-     *
-     * @returns The written file's absolute path, or `undefined` on cancel/error.
-     */
-    private async writeWithCollisionHandling(
-        workspaceRoot: vscode.Uri,
-        destDir: vscode.Uri,
-        fileName: string,
-        content: string,
-    ): Promise<string | undefined> {
-        let name  = fileName;
-        let force = false;
-        for (;;) {
-            const result = await writeTemplateFile({ workspaceRoot, destDir, fileName: name, content, force });
-            if (result.kind === 'success') { return result.filePath; }
-            if (result.kind === 'error') {
-                void vscode.window.showErrorMessage(`Obsidian Artifacts: ${result.message}`);
-                return undefined;
-            }
-            // ── collision → ask ────────────────────────────────────────────────
-            const choice = await vscode.window.showWarningMessage(
-                `"${name}" already exists in that folder.`, { modal: true }, 'Overwrite', 'Rename');
-            if (choice === 'Overwrite') { force = true; continue; }
-            if (choice !== 'Rename')    { return undefined; }  // Cancel / dismissed
-            const renamed = await this.askFileName(name);
-            if (renamed === undefined) { return undefined; }
-            name  = renamed;
-            force = false;
+        if (result.kind === 'written') {
+            this.dispose();
+            this.cb.closePicker();
         }
     }
 
     /**
-     * Picks the canonical code source for `Insert`:
-     *   - fullEdit mode → live `.md` document content (may have unsaved external edits)
-     *   - else          → `msg.code` from the contenteditable webview surface
-     *   - fallback      → `artifact.code` (last parsed snapshot)
+     * Canonical code source for `Insert`: fullEdit mode → live `.md` document;
+     * else `msg.code` from the webview; fallback → `artifact.code`.
      */
     private resolveInsertCode(msg: Record<string, unknown>, artifact: ParsedArtifactFile): string {
         const mode = this.modeController?.mode ?? 'preview';
