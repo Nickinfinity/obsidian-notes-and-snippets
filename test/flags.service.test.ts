@@ -116,6 +116,57 @@ suite('extractFlaggedRegions', () => {
         assert.strictEqual(extractFlaggedRegions(body)[0].content, 'first\n\n\nlast');
     });
 
+    // ── `***` visual rules ──────────────────────────────────────────────────
+    // The flags are invisible in Obsidian, so authors bracket a region with
+    // `***` to see where a block starts and ends. It is chrome, never payload.
+
+    test('the `***` bracket around a region is dropped', () => {
+        const body = '%%oa:start%%\n***\n# here the MD text\n***\n%%oa:end%%';
+        assert.strictEqual(extractFlaggedRegions(body)[0].content, '# here the MD text');
+    });
+
+    test('rules are dropped even with blank lines around them', () => {
+        const body = '%%oa:start Dev%%\n\n***\n\npayload\n\n***\n\n%%oa:end%%';
+        assert.deepStrictEqual(extractFlaggedRegions(body), [{ name: 'Dev', content: 'payload' }]);
+    });
+
+    test('a `***` is dropped wherever it appears, not only at the boundaries', () => {
+        const body = '%%oa:start%%\n***\nintro\n***\noutro\n***\n%%oa:end%%';
+        assert.strictEqual(extractFlaggedRegions(body)[0].content, 'intro\noutro');
+    });
+
+    test('`---` is ordinary content now — only `***` is the marker rule', () => {
+        const body = '%%oa:start%%\n***\nintro\n\n---\n\noutro\n***\n%%oa:end%%';
+        assert.strictEqual(extractFlaggedRegions(body)[0].content, 'intro\n\n---\n\noutro');
+    });
+
+    test('longer asterisk runs count as a rule; two do not', () => {
+        assert.strictEqual(extractFlaggedRegions('%%oa:start%%\n*****\nbody\n%%oa:end%%')[0].content, 'body');
+        assert.strictEqual(extractFlaggedRegions('%%oa:start%%\n**\nbody\n%%oa:end%%')[0].content, '**\nbody');
+    });
+
+    test('bold-italic text is not a rule', () => {
+        const body = '%%oa:start%%\n***emphasis***\n%%oa:end%%';
+        assert.strictEqual(extractFlaggedRegions(body)[0].content, '***emphasis***');
+    });
+
+    test('a `***` inside a fenced block is untouched content', () => {
+        const body = '%%oa:start%%\n```md\n***\nstyled\n***\n```\n%%oa:end%%';
+        assert.strictEqual(extractFlaggedRegions(body)[0].content, '```md\n***\nstyled\n***\n```');
+    });
+
+    test('a rule-only region collapses to empty rather than keeping the chrome', () => {
+        assert.strictEqual(extractFlaggedRegions('%%oa:start%%\n***\n%%oa:end%%')[0].content, '');
+    });
+
+    test('a `***` between two regions belongs to neither and changes nothing', () => {
+        const body = '%%oa:start A%%\none\n%%oa:end%%\n***\n%%oa:start B%%\ntwo\n%%oa:end%%';
+        assert.deepStrictEqual(extractFlaggedRegions(body), [
+            { name: 'A', content: 'one' },
+            { name: 'B', content: 'two' },
+        ]);
+    });
+
     test('CRLF files parse identically to LF files', () => {
         const body = '%%oa:start Dev%%\r\npayload\r\n%%oa:end%%\r\n';
         assert.deepStrictEqual(extractFlaggedRegions(body), [{ name: 'Dev', content: 'payload' }]);

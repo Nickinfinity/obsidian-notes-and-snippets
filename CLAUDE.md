@@ -9,7 +9,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (659 passing)
+npm run test           # Compile + lint + run all tests (675 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -86,7 +86,7 @@ src/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
 │   └── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 659 tests. fixtures/ + snapshots/
+test/                                 # 675 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
 └── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
@@ -358,6 +358,14 @@ npm test
   `readFencedPayload` in one line.
 - One region → single-block file; **named regions → `ParsedBlock`s** keyed by the
   name, reusing the multi-block picker with no new UI.
+- **`***` inside a region is chrome.** Flags are invisible in Obsidian, so
+  authors bracket a region with `***` to see the block — the visual job a fence
+  does for a snippet. Every `***` line between Start and End is dropped;
+  **outside a region, and in flag-less files, it is content**. `---` is never
+  special (ambiguous with frontmatter and setext H2).
+- **Flags are optional for whole-file types.** Precedence is flags → code fence
+  → bare body, and the bare-body fallback fires **only** for `writesFile` types
+  with nothing fenced, so `snippet`/`command` behaviour is untouched.
 - Scanning **skips fenced regions** (a prompt documenting the syntax in a
   ` ```md ` sample must not terminate itself) and defaults `language` to
   `markdown`, which is what makes `extForLang` yield `.md` downstream.

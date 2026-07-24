@@ -159,6 +159,55 @@ suite('flagged payloads flow through the whole-file (template + agent) path', ()
     });
 });
 
+suite('flags are optional for whole-file types (template + agent)', () => {
+
+    test('a bare markdown agent note with no flags and no fence is the payload', () => {
+        const content = '---\ntype: agent\ntitle: Reviewer\ntarget: CLAUDE.md\n---\n\n# Reviewer\n\nBe terse with <VK-repo_name>.';
+        const parsed = parse(content);
+        assert.strictEqual(parsed.code, '# Reviewer\n\nBe terse with <VK-repo_name>.');
+        assert.strictEqual(parsed.frontmatter.language, 'markdown');
+        assert.deepStrictEqual(parsed.blocks, []);
+        assert.strictEqual(resolveOutputFileName(parsed), 'CLAUDE.md');
+    });
+
+    test('the vars section is not written into the payload', () => {
+        const content = '---\ntype: agent\n---\nBe terse with <VK-repo_name>.\n\nvars:\n```vks\nVK-repo_name=my-app\n```\n';
+        const parsed = parse(content);
+        assert.strictEqual(parsed.code, 'Be terse with <VK-repo_name>.');
+        assert.deepStrictEqual(parsed.vars, [{ name: 'VK-repo_name', defaultValue: 'my-app' }]);
+    });
+
+    /** No flags → nothing is chrome, so a `***` the author wrote is kept. */
+    test('a flag-less note keeps its `***` — the rule is only ignored inside a region', () => {
+        const content = '---\ntype: agent\n---\nintro\n\n***\n\noutro';
+        assert.strictEqual(parse(content).code, 'intro\n\n***\n\noutro');
+    });
+
+    test('a template with no fence takes the whole body too', () => {
+        const content = '---\ntype: template\ntitle: Readme\n---\n# <VK-project_name>\n\nDocs go here.';
+        const parsed = parseFromContent(content, '/vault/Templates/readme.md', '/vault/Templates');
+        assert.strictEqual(parsed.code, '# <VK-project_name>\n\nDocs go here.');
+        assert.strictEqual(resolveOutputFileName(parsed), 'Readme.md');
+    });
+
+    /** The fallback must never outrank an actual code block. */
+    test('an existing code fence still wins over the bare body', () => {
+        const content = '---\ntype: agent\n---\nPreamble prose.\n\n```md\nfenced payload\n```\n\nTrailing prose.';
+        assert.strictEqual(parse(content).code, 'fenced payload');
+    });
+
+    test('a snippet with no fence does NOT take the bare body (insert types are unchanged)', () => {
+        const content = '---\ntype: snippet\n---\nJust some prose in a note.';
+        const parsed = parseFromContent(content, '/vault/Snippets/x.md', '/vault/Snippets');
+        assert.strictEqual(parsed.code, '', 'only whole-file types get the bare-markdown fallback');
+    });
+
+    test('flags still win when present', () => {
+        const content = '---\ntype: agent\n---\nexcluded\n%%oa:start%%\nincluded\n%%oa:end%%\nexcluded too';
+        assert.strictEqual(parse(content).code, 'included');
+    });
+});
+
 suite('flags are additive — unflagged files are untouched', () => {
 
     test('a classic fenced single-block file parses exactly as before', () => {

@@ -405,6 +405,7 @@ reading view** while staying plain text on disk.
 |---|---|
 | Start | `%%oa:start%%` — or `%%oa:start Some name%%` |
 | End | `%%oa:end%%` |
+| Visual rule (optional) | `***` on its own line, **inside** a region — dropped from the payload |
 
 - **Own line.** A flag must be the only thing on its line. Leading/trailing
   whitespace and spaces inside the `%%…%%` are tolerated (`%% oa:start Dev %%`).
@@ -436,6 +437,36 @@ reading view** while staying plain text on disk.
 - **Two lenient rules**, so a half-typed file still previews: an unterminated
   start flag runs to end of file, and a second start flag while a region is open
   is content, not a new region.
+- **`***` inside a region is chrome, not content.** The flags themselves are
+  invisible in Obsidian, so an author brackets a region with `***` horizontal
+  rules to *see* where a block begins and ends — the visual job a ` ``` ` fence
+  does for a snippet, which matters most in a multi-region prompt file. Every
+  `***` line **between a Start and an End flag** is dropped from the payload,
+  wherever it sits.
+
+~~~md
+%%oa:start Dev review%%
+***
+# Reviewer
+
+Review <VK-repo_name> before merging.
+***
+%%oa:end%%
+~~~
+→ payload: `# Reviewer\n\nReview <VK-repo_name> before merging.`
+
+  Precise rules:
+  - **Only inside a region.** A `***` before the first Start, between an End and
+    the next Start, or anywhere in a file with **no flags at all** (§7.5) is
+    ordinary markdown and is preserved.
+  - **Only `***`.** `---` is ordinary content — an author may genuinely want a
+    thematic break inside a prompt, and `---` is ambiguous in markdown anyway
+    (frontmatter at the top of a file; a setext H2 directly under a text line).
+    `***` renders as a horizontal line in every position.
+  - The whole line must be asterisks: `***`, `*****`, `  ***  ` are rules;
+    `**`, `* * *`, and `***emphasis***` are content.
+  - A `***` inside a fenced code block is content — fenced lines are never
+    scanned for markers.
 
 ### 7.3 Variables
 
@@ -479,3 +510,38 @@ subtype later requires **no extraction code** — only its `ARTIFACTS` row.
 the fenced shape, and `parse(serialize(x))` is unaffected because the serializer
 never emits flags. Hand-authored flagged files are edited through **Edit .md**
 (raw text), not re-serialized.
+
+### 7.5 Flags are optional for whole-file types
+
+A `template` or `agent` file **is** the artifact, so when it is a single block
+there is nothing to delimit — write the note and leave the flags out entirely:
+
+~~~md
+---
+type: agent
+title: Code reviewer
+target: CLAUDE.md
+---
+
+# Reviewer
+
+Be terse with <VK-repo_name>.
+
+vars:
+```vks
+VK-repo_name=my-app
+```
+~~~
+
+Precedence, strictly ordered so no existing file changes meaning:
+
+1. **Flags** — if the file has any region, that is the payload.
+2. **Code fence** — the classic shape; a ` ```vks ` fence does not count (it is
+   the defaults section, not content).
+3. **Bare body** — only for types with `writesFile` (`template`, `agent`): the
+   whole body minus its `vars:` / ` ```vks ` section, with `language: markdown`.
+
+Cursor-insert types (`snippet`, `command`, `variables`) never take rule 3 — a
+note with no fence and no flags yields no code, exactly as before. When
+multi-block support arrives for the whole-file types, flags become the way to
+mark each region; a single-region file will still be able to omit them.

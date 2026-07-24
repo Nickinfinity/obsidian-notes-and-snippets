@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getAllTypes, getTypeForDir } from './artifact-type-config.service.js';
+import { getAllTypes, getTypeForDir, writesWholeFile } from './artifact-type-config.service.js';
 import { extractFlaggedRegions, type FlaggedRegion } from './flags.service.js';
 import type { ArtifactType, ParsedArtifactFile, ParsedBlock, ParsedFrontmatter, ParsedVar } from '../types/parsed-artifact.types.js';
 
@@ -444,7 +444,7 @@ export function parseFromContent(content: string, filePath: string, artifactRoot
     const regions = extractFlaggedRegions(stripFrontmatter(content));
     const payload = regions.length > 0
         ? readFlaggedPayload(regions, content)
-        : readFencedPayload(content);
+        : readUnflaggedPayload(content, frontmatter.type);
 
     if (!frontmatter.language && payload.fenceLang) { frontmatter.language = payload.fenceLang; }
     return {
@@ -479,6 +479,62 @@ interface ParsedPayload {
 function readFencedPayload(content: string): ParsedPayload {
     const { code, fenceLang } = parseCodeBlock(content);
     return { code, fenceLang, vars: parseVars(content), blocks: parseBlocks(content) };
+}
+
+/**
+ * Reads a file that carries **no flags**: the classic fenced payload, or — for a
+ * whole-file type with nothing fenced at all — the bare note body.
+ *
+ * Flags are optional for `template` / `agent` because such a file *is* the
+ * artifact: a one-block markdown note needs no markers to say "all of it". The
+ * fallback fires only when the file offers nothing else, so every fenced or
+ * multi-block file keeps its existing meaning exactly.
+ *
+ * A ` ```vks ` fence does not count as content — it is the defaults section, and
+ * without this check a note whose only fence is `vks` would parse its own
+ * variable list as the payload.
+ *
+ * @param content - Full UTF-8 file content (frontmatter included).
+ * @param type    - Parsed artifact type; only whole-file types get the fallback.
+ * @returns The payload fields for a flag-less file.
+ *
+ * @example
+ * readUnflaggedPayload('---\ntype: agent\n---\nBe terse.', 'agent')
+ * // → { code: 'Be terse.', fenceLang: 'markdown', … }
+ */
+function readUnflaggedPayload(content: string, type: ArtifactType): ParsedPayload {
+    const fenced = readFencedPayload(content);
+    const hasContentFence = fenced.code !== '' && fenced.fenceLang !== 'vks';
+    if (hasContentFence || !writesWholeFile(type)) { return fenced; }
+
+    const body = stripVarsSection(stripFrontmatter(content)).trim();
+    if (body === '') { return fenced; }
+
+    return {
+        code:      body,
+        fenceLang: FLAGGED_PAYLOAD_LANG,
+        vars:      mergeVarDefaults(extractVars(body), fenced.vars),
+        blocks:    [],
+    };
+}
+
+/**
+ * Removes the trailing defaults section — an optional `vars:` label plus the
+ * ` ```vks ` fence — from a note body.
+ *
+ * Only used by the bare-markdown fallback, where the whole body is the payload
+ * and the author's variable list must not be written into the output file.
+ *
+ * @param body - File body with frontmatter already stripped.
+ * @returns The body without its vars section.
+ *
+ * @example
+ * stripVarsSection('Be terse.\n\nvars:\n```vks\nVK-a=1\n```') // → 'Be terse.\n\n'
+ */
+function stripVarsSection(body: string): string {
+    return body
+        .replace(VKS_FENCE_RE, '')
+        .replace(/^[ \t]*vars:?[ \t]*$/m, '');
 }
 
 /**
