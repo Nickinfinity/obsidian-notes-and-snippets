@@ -9,7 +9,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ### Added
 
 - **Templates now create whole files.** Right-click a folder (or file) in the
-  Explorer and choose **New File from Template** to write a template to disk as a
+  Explorer and choose **Insert Template** to write a template to disk as a
   real file — its `<VK-xxx>` variables filled in first, and the file opens
   automatically. The new file's name and extension are suggested from the
   template (a `extension:` field in the template, or its code language) and are
@@ -22,7 +22,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Breaking:** Templates no longer appear in the **editor** right-click menu.
   A template writes a file into your project rather than inserting text at the
   cursor, so it now lives only in the **Explorer** right-click menu as
-  *New File from Template*. If you previously used "Insert Templates" from the
+  *Insert Template*. If you previously used "Insert Templates" from the
   editor, use a Snippet instead, or invoke the template from the Explorer.
 
 - Initial release

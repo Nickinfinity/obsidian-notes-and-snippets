@@ -32,12 +32,12 @@
       {
         "command": "obsidian-artifacts.insert.commands",
         "category": "Obsidian Artifacts",
-        "title": "Insert Commands"
+        "title": "Insert Command"
       },
       {
         "command": "obsidian-artifacts.insert.templates",
         "category": "Obsidian Artifacts",
-        "title": "New File from Template"
+        "title": "Insert Template"
       },
       {
         "command": "obsidian-artifacts.insert.variables",
@@ -219,7 +219,7 @@
         "obsidianArtifacts.features.templates": {
           "type": "boolean",
           "default": false,
-          "description": "Enable the Templates directory (Explorer context menu — New File from Template)."
+          "description": "Enable the Templates directory (Explorer context menu — Insert Template)."
         },
         "obsidianArtifacts.features.variables": {
           "type": "boolean",

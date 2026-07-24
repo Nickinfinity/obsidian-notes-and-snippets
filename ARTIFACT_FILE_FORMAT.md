@@ -284,7 +284,7 @@ Rules a serializer enforces:
 
 ### 5.1 Templates — whole-file behaviour
 
-A `template` is not a fragment inserted at the cursor; invoking **New File from
+A `template` is not a fragment inserted at the cursor; invoking **Insert
 Template** from the Explorer writes the artifact's single code block to disk as a
 real file, with `<VK-xxx>` variables resolved exactly as every other artifact
 resolves them.
