@@ -12,7 +12,10 @@ import { renderPreviewHtml, renderMultiBlockPreviewHtml, renderPopupEmptyHtml, m
 import { FullEditController } from './fullEditor.js';
 import { BlockEditController } from './blockEditor.js';
 import { VarSetController } from './varSetController.js';
-import { runCreateFileFlow } from './preview.createFile.js';
+import { runCreateFileFlow, toBatchOutcome } from './preview.createFile.js';
+import { BatchGate } from './preview.batch.js';
+import { isIndexArtifact } from '../../../services/multi-index.service.js';
+import type { BatchOutcome } from '../../../types/multi-index.types.js';
 
 // Re-export the adapter so the navigator does not need to import preview.helpers directly.
 export { blockAsArtifact } from './preview.helpers.js';
@@ -52,6 +55,7 @@ export class PreviewPanelController {
     private readonly fullEdit:  FullEditController;
     private readonly blockEdit: BlockEditController;
     private readonly varSet:    VarSetController;
+    private readonly batch = new BatchGate();  // one-shot per-step gate a MultiIndexRunner arms (T4)
     /** Which code fence the Edit Block action targets; updated on each `showPreview`. */
     private currentBlockRef: BlockRef = { kind: 'single' };
 
@@ -97,6 +101,16 @@ export class PreviewPanelController {
 
     /** Disposes the popup panel — the dispose listener fires `cb.onDispose`. */
     dispose(): void { this.panel?.dispose(); }
+
+    /** `MultiIndexRunner`'s per-step hook: arms the batch gate, shows the preview,
+     *  reveals the panel, and returns the gate's promise (settled by `handleCreateFile` /
+     *  `cancel` / `onDidDispose`). */
+    previewOnce(artifact: ParsedArtifactFile, destDir: vscode.Uri): Promise<BatchOutcome> {
+        const outcome = this.batch.arm(destDir);
+        this.showPreview(artifact);
+        this.reveal(false);
+        return outcome;
+    }
 
     // ── Renderers ─────────────────────────────────────────────────────────────
 
@@ -170,6 +184,7 @@ export class PreviewPanelController {
                 this.panel           = undefined;
                 this.modeController  = undefined;
                 this.currentArtifact = undefined;
+                this.batch.settle({ kind: 'aborted' });  // no-op unless still armed (D5)
                 this.cb.onDispose();
             });
             // Order matters — base.css carries the global reset every panel needs.
@@ -208,13 +223,16 @@ export class PreviewPanelController {
         else if (cmd === 'editBlock')     { await this.handleEditBlock(); }
         else if (cmd === 'saveSection')   { await this.handleSaveSection(msg); }
         else if (cmd === 'insert')        { this.handleInsert(msg); }
-        else if (cmd === 'cancel')        { this.dispose(); }
+        else if (cmd === 'cancel')        { this.cancel(); }
         else if (cmd === 'pickVarSet')    { await this.varSet.handlePickVarSet(msg); }
         else if (cmd === 'confirmApply')  { this.varSet.handleConfirmApply(); }
         else if (cmd === 'cancelApply')   { this.varSet.handleCancelApply(); }
         else if (cmd === 'saveAsVarSet')  { await this.varSet.handleSaveAsVarSet(msg); }
         else if (cmd === 'clearVarSource'){ this.modeController?.clearVarSource(msg.name as string); }
     }
+
+    /** Cancel: settles the batch gate `skipped` when armed (D5); else disposes as before. */
+    private cancel(): void { if (this.batch.isArmed) { this.batch.settle({ kind: 'skipped' }); return; } this.dispose(); }
 
     private handleFullEdit(): void {
         const artifact = this.currentArtifact;
@@ -269,6 +287,10 @@ export class PreviewPanelController {
         const artifact = this.currentArtifact;
         if (!artifact) { return; }
 
+        // Index guard (F7): a hovered index still renders Create File — only an armed run may write it.
+        if (isIndexArtifact(artifact.frontmatter) && !this.batch.isArmed) {
+            void vscode.window.showInformationMessage('This is a template index — press Enter in the picker to run it.'); return;
+        }
         // Templates/agent configs write a whole file instead of inserting at the
         // cursor; `writesWholeFile` is the single source shared with the label.
         if (writesWholeFile(artifact.frontmatter.type)) {
@@ -286,19 +308,17 @@ export class PreviewPanelController {
         this.cb.closePicker();
     }
 
-    /** Routes to the extracted Create File flow (D12); `destDir: undefined` +
-     *  `openAfterWrite: true` reproduces prior interactive behaviour exactly. */
+    /** Routes to the Create File flow (D12); armed (batch step) pins `destDir`, skips
+     *  the tab-open (D7), and settles the gate instead of closing the panel/picker. */
     private async handleCreateFile(msg: Record<string, unknown>, artifact: ParsedArtifactFile): Promise<void> {
         const code = this.resolveInsertCode(msg, artifact);
         const vars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
-
         const result = await runCreateFileFlow({
-            artifact, code, vars, destDir: undefined, destUri: this.cb.destUri, openAfterWrite: true,
+            artifact, code, vars, destDir: this.batch.destDir,
+            destUri: this.cb.destUri, openAfterWrite: !this.batch.isArmed,
         });
-        if (result.kind === 'written') {
-            this.dispose();
-            this.cb.closePicker();
-        }
+        if (this.batch.isArmed) { this.batch.settle(toBatchOutcome(result, vars)); return; }
+        if (result.kind === 'written') { this.dispose(); this.cb.closePicker(); }
     }
 
     /**

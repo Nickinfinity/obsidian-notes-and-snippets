@@ -16,12 +16,33 @@ import { writeTemplateFile } from '../../../services/template-writer.service.js'
 import { resolveDestination } from '../../../services/template-destination.service.js';
 import { validateTargetFileName } from '../../../services/filename.service.js';
 import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js';
+import type { BatchOutcome } from '../../../types/multi-index.types.js';
 
 /** Outcome of {@link runCreateFileFlow}. */
 export type CreateFileResult =
     | { kind: 'written'; filePath: string }
     | { kind: 'cancelled' }
     | { kind: 'error' };
+
+/**
+ * Maps a {@link CreateFileResult} onto the batch gate's `BatchOutcome` union
+ * (T4 hook 3 / the seam the reviewer flagged): a failed step — `cancelled` or
+ * `error` — must not abort the whole run, so both collapse to `skipped`; only
+ * `written` carries forward, picking up the resolved vars for the runner's
+ * carry-over map.
+ *
+ * @param result - Outcome of {@link runCreateFileFlow}.
+ * @param vars - Resolved vars to attach when `result.kind === 'written'`.
+ * @returns The corresponding `BatchOutcome`.
+ *
+ * @example
+ * toBatchOutcome({ kind: 'cancelled' }, {}); // → { kind: 'skipped' }
+ */
+export function toBatchOutcome(result: CreateFileResult, vars: Record<string, string>): BatchOutcome {
+    return result.kind === 'written'
+        ? { kind: 'written', vars, filePath: result.filePath }
+        : { kind: 'skipped' };
+}
 
 /** Arguments for {@link runCreateFileFlow}. */
 export interface RunCreateFileFlowArgs {
