@@ -27,7 +27,7 @@ correct this line if the real number differs.
 | T4 — Preview batch hooks | 2 | worker | done | 746 → 746 | pass | 0 (APPROVE) | index guard uses `isIndexArtifact`; `preview.ts` **320 → 340** (at budget); armed write still routes through `writeTemplateFile` |
 | T5 — Destination chooser (D9) | 2 | worker | done | 746 → 746 | pass | 0 (APPROVE) | `pickDestFolder` reused; `showQuickPick` first-item-active satisfies D9 (reviewer: `createQuickPick` would be over-engineering) |
 | T6 — `MultiIndexRunner` 🔒 | 2 | worker | done | 746 → 754 | pass | 0 (APPROVE) | **security-critical**; 8 tests incl. hostile fixture; both containment asserts precede their I/O; reviewer named the new `createDirectory` surface, traced clean. Orchestrator: stricter non-`Error` throw guard |
-| T7 — Navigator routing | 3 | worker | todo | — | — | 0 | must hide the QuickPick first (F6); F5 pass |
+| T7 — Navigator routing | 3 | worker | done | 754 → 754 | pass | 0 (APPROVE) | one branch + `runIndex`; F6 hide is **after** the no-workspace/cancel guards; `navigator.ts` 369 → **399** (<400); reviewer verified all three containment roots wired correctly |
 | T8 — Docs | 4 | worker | todo | — | — | 0 | docs-only — no ticket, no ticket prefix |
 
 ---
@@ -40,6 +40,7 @@ correct this line if the real number differs.
 | 2026-07-24 | 0 | `rm -rf dist && npm test && npx tsc --noEmit` | pass | **679** (+4) | O1 + O2 integrated; 4 new tests in `frontmatter-keys.test.ts` |
 | 2026-07-24 | 1 | `rm -rf dist && npm test && npx tsc --noEmit` | pass | **746** (+67) | T1 +60, T2 +7, T3 ±0; reviewer re-ran the gate independently |
 | 2026-07-26 | 2 | `rm -rf dist && npm test && npx tsc --noEmit` | pass | **754** (+8) | T4 ±0, T5 ±0, T6 +8; reviewer re-ran the gate + manual security trace of the new `createDirectory` surface (first Wave 2 reviewer hit a session limit; a fresh reviewer completed it) |
+| 2026-07-26 | 3 | `rm -rf dist && npm test && npx tsc --noEmit` | pass | **754** (±0) | T7 wiring only; reviewer verified F6 hide ordering + the three containment roots |
 
 ---
 
