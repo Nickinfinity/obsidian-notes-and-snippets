@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { parseFromContent } from '../../../services/parser.service.js';
 import type { BlockRef } from '../../../services/artifact-patcher.service.js';
@@ -7,6 +8,10 @@ import { ArtifactItem, buildItem, PREVIEW_DEBOUNCE_MS } from './navigator.helper
 import { PreviewPanelController, blockAsArtifact } from './preview.js';
 import { getVaultRootUri } from '../../../services/config.service.js';
 import { forcesSingleBlock } from '../../../services/artifact-type-config.service.js';
+import { isIndexArtifact } from '../../../services/multi-index.service.js';
+import { resolveDestination } from '../../../services/template-destination.service.js';
+import { MultiIndexRunner } from './multiIndex.js';
+import { chooseStepDestination } from './multiIndex.dest.js';
 
 /**
  * Opens a QuickPick navigator for the given vault artifact directory.
@@ -82,7 +87,7 @@ class ArtifactNavigator {
         targetEditor: vscode.TextEditor | undefined,
         extensionUri: vscode.Uri,
         storageUri: vscode.Uri,
-        destUri?: vscode.Uri,
+        private readonly destUri?: vscode.Uri,
     ) {
         this.rootUri      = rootUri;
         this.currentDir   = rootUri;
@@ -344,12 +349,37 @@ class ArtifactNavigator {
             return;
         }
 
+        if (isIndexArtifact(artifact.frontmatter)) { await this.runIndex(artifact); return; }
+
         if (this.isMultiBlockNav(artifact)) {
             this.loadBlocks(artifact);
             return;
         }
 
         this.handoffToPreview(artifact);
+    }
+
+    /**
+     * Runs a template index (F7): resolves the destination (D2), hides the QuickPick before the run starts (F6), hands off to `MultiIndexRunner`.
+     * @param artifact - Parsed index file.
+     * @returns Resolves once the run (or an early guard) finishes.
+     * @example await this.runIndex(indexArtifact);
+     */
+    private async runIndex(artifact: ParsedArtifactFile): Promise<void> {
+        if (!vscode.workspace.workspaceFolders?.length) { vscode.window.showErrorMessage('Obsidian Artifacts: Open a workspace folder to run a template index.'); return; }
+        const destDir = await resolveDestination(this.destUri);
+        if (!destDir) { return; }
+        const workspaceRoot = vscode.workspace.getWorkspaceFolder(destDir)?.uri;
+        if (!workspaceRoot) { vscode.window.showErrorMessage('Obsidian Artifacts: Destination is not inside an open workspace folder.'); return; }
+        this.keepPopupOnHide = true; this.qp.hide();
+        const clickedRelPath = destDir.fsPath === workspaceRoot.fsPath ? '' : path.relative(workspaceRoot.fsPath, destDir.fsPath).replaceAll(path.sep, '/');
+        const runner = new MultiIndexRunner({
+            indexDirUri: vscode.Uri.joinPath(vscode.Uri.file(artifact.filePath), '..'),
+            workspaceRoot, clickedRelPath, vaultRootFs: this.rootUri.fsPath,
+            chooseDestination: (step, candidates) => chooseStepDestination({ workspaceRoot, candidates, targetName: path.posix.basename(step.relPath) }),
+            previewStep: (a, d) => this.preview.previewOnce(a, d), closePicker: () => this.qp.hide(), disposePreview: () => this.preview.dispose(),
+        });
+        await runner.run(artifact);
     }
 
     /** Hide QP, render artifact in interactive preview, focus the panel. */

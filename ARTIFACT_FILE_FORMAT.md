@@ -251,9 +251,9 @@ Closing the tag leaves nothing open. Both render-safe spellings are supported:
 | `type` | Vault dir | `language` field | Code fence | Defaults | Multi-block | Notes |
 |---|---|---|---|---|---|---|
 | `snippet` | `Snippets` | yes (or plain text) | language or empty | ` ```vks ` | yes | Editor insert. |
-| `template` | `Templates` | yes (or plain text) | language or empty | ` ```vks ` | **no (D1)** | Explorer → **writes a whole file** into the workspace. Single-block only. `extension:` overrides the fence language (see §5.1). |
+| `template` | `Templates` | yes (or plain text) | language or empty | ` ```vks ` | **no (D1)** | Explorer → **writes a whole file** into the workspace. Single-block only. `extension:` overrides the fence language (see §5.1). May carry `index: true` — a **template index** whose body links the files one run scaffolds (§8). |
 | `command` | `Commands` | yes — **locked to `bash`** | `bash` (locked by serializer) | ` ```vks ` | yes | Terminal insert. |
-| `agent` | `AgentsConf` | optional | language, empty, **or none — flags instead (§7)** | ` ```vks ` | yes* | Explorer → **writes a whole file** into the workspace (like `template`), named from `target:` (§5.2). `provider` / `model` / `version` record the AI provenance (agent-only, §5.2). *Create File enforces a single block/region. |
+| `agent` | `AgentsConf` | optional | language, empty, **or none — flags instead (§7)** | ` ```vks ` | yes* | Explorer → **writes a whole file** into the workspace (like `template`), named from `target:` (§5.2). `provider` / `model` / `version` record the AI provenance (agent-only, §5.2). May carry `index: true` (§8), like `template`. *Create File enforces a single block/region. |
 | `variables` | `Variables` | n/a | ` ```vks ` only | the block itself | yes (sub-sets) | `env:` labels the environment. Variable Sets live here. |
 
 Rules a serializer enforces:
@@ -281,6 +281,10 @@ Rules a serializer enforces:
 - **`provider` / `model` / `version`:** `type: agent`-only frontmatter keys
   (§5.2). Each emitted verbatim (single line enforced) when non-empty, in the
   key order above. Parsed as plain strings. Absent/empty for every other type.
+- **`index` / `paths`:** whole-file-type-only and **read-side only** — the
+  parser reads them, the serializer never emits them and neither appears in the
+  key order above (§8.7). `index` is a real boolean (exact `true`); `paths` is
+  an inline array parsed by the same rule as `tags`.
 
 ### 5.1 Templates — whole-file behaviour
 
@@ -545,3 +549,165 @@ Cursor-insert types (`snippet`, `command`, `variables`) never take rule 3 — a
 note with no fence and no flags yields no code, exactly as before. When
 multi-block support arrives for the whole-file types, flags become the way to
 mark each region; a single-region file will still be able to omit them.
+
+---
+
+## 8. Template indexes — `index: true`
+
+A **template index** is an ordinary whole-file artifact (§5.1 / §5.2) carrying
+`index: true`, whose body links sibling artifacts in the same vault folder tree.
+Invoking it scaffolds **every linked file in one run** — the links are the
+payload, not the code:
+
+~~~md
+---
+type: template
+title: React component scaffold
+index: true
+paths: [src/components, packages/ui/src]
+---
+
+1. [[dir_2/subdir1/Button]]
+2. [T](dir_2/subdir1/Button.test.md)
+3. [[dir_1/barrel]]
+~~~
+
+It is deliberately additive: **no** new artifact type, **no** new vault
+directory, **no** new command and **no** new context-menu entry. An index lives
+in `Templates/` or `AgentsConf/` like any other file of its type.
+
+### 8.1 The two keys
+
+| Key | Type | Meaning |
+|---|---|---|
+| `index` | boolean | Marks the file as an index. **Only the exact value `true`** counts — a stringly-typed `false` cannot reach a downstream check as truthy (`BOOLEAN_FRONTMATTER_KEYS`, `parser.service.ts`). |
+| `paths` | inline array | Extra destination folders offered for **every** link in the index. Workspace-folder-relative, POSIX, **file-level** (declared once, not per link) and **suggestions only** — the user may ignore all of them. Shares `parseInlineArray` with `tags`, so `paths: [a, b]` splits by exactly the same rule (`ARRAY_FRONTMATTER_KEYS`). |
+
+**`index: true` is valid only on the whole-file types.** A run can only *write*
+files, so `isIndexArtifact` requires `fm.index === true` **and**
+`writesWholeFile(fm.type)` — a `snippet`, `command` or `variables` file carrying
+`index: true` is not an index and behaves exactly as before.
+
+**An index is never written to disk verbatim.** Pressing Enter on one in the
+picker starts a run; a mouse click on **Create File** while merely hovering it
+is refused with a message pointing back at the picker. There is no path by which
+`index.md` itself lands in the workspace.
+
+### 8.2 Link syntax and order
+
+Both Obsidian-native spellings are accepted, matched in **one pass** so their
+relative order is the document order the run follows:
+
+| Form | Example | Notes |
+|---|---|---|
+| Wikilink | `[[dir_2/subdir1/Button]]` | Alias (`\|text`) and anchor (`#Heading`) suffixes are stripped; the target is what remains. |
+| Markdown link | `[T](dir_2/subdir1/Button.test.md)` | The URL is the target; the link text is ignored. |
+
+- **Document order is the run order.** Duplicates are preserved — a link written
+  twice is two steps.
+- **Images and embeds are not links.** Both `![alt](url)` and `![[Button]]` are
+  excluded — they display a note rather than nominate one to scaffold — so an
+  illustrated index does not try to scaffold its own screenshots, and embedding
+  a note for context does not add a step.
+- **A link is single-line, and its target carries no `[` or `(`.** A target
+  containing either character, or spanning a newline, is not recognised as a
+  link at all. This is deliberate: it is what keeps link scanning **linear** on
+  a hostile body (a flood of unclosed `[[[[…` costs one character per attempt,
+  not a scan to end-of-input per start position). Such a name is unlinkable
+  rather than silently truncated into a *different* path.
+- `.md` is appended when the target does not already end in it, so
+  `[[dir_1/barrel]]` and `[T](dir_1/barrel.md)` name the same file.
+- Any text that is not a link is ignored — numbering, prose and headings are
+  free chrome, the same way `***` is chrome inside a flag region (§7.2).
+
+### 8.3 Resolution — subtree-relative, and the rejection list
+
+A link resolves **relative to the index file's own directory only**. There is no
+vault-wide search: a link that legitimately lives elsewhere in the vault is
+**rejected, not chased down**.
+
+Every vault-authored string that becomes a filesystem path — both link targets
+and `paths:` entries — goes through the single rejection authority
+`safeRelPath` (`src/services/multi-index.service.ts`). It **rejects, never
+sanitises**:
+
+| Rejected | Reason reported |
+|---|---|
+| `../escape`, `a/../../b` | `contains a parent-directory ("..") segment` |
+| `/etc/passwd` | `absolute path` |
+| `C:\tmp`, `file:///etc` | `contains a drive letter or URI scheme (":")` |
+| `dir\sub\file` | `contains a backslash path separator` |
+| any C0 / DEL / C1 control character | `contains a NUL or control character` |
+| `''`, `/`, `.` | `empty path` |
+
+Accepted paths are normalised to POSIX — doubled separators and `.` segments
+collapse — but segment *content* is never decoded, so a percent-encoded
+traversal (`%2e%2e%2f…`) has no real `/` to split on and survives as one inert
+literal segment instead of resolving back into `..`.
+
+A rejected entry is **reported by name with its reason** in a single warning and
+carries no rewritten path — a refused value never comes back as a different,
+"cleaned" one. The rest of the run continues.
+
+### 8.4 What a linked file must be
+
+Each link is read and parsed as an ordinary artifact, then checked. A failure
+**skips that one step with a warning** — an index that accidentally links a
+snippet must not abort the rest of the scaffold:
+
+- **A whole-file type** (`template` or `agent`) — `writesWholeFile`, the same
+  gate the Create File button uses.
+- **Single-block** — the shared `validateSingleBlock` rule of §5.1 / §5.2. An
+  index may not link a 2+ block file, because one link writes one file.
+- **Readable** — an unresolvable or unreadable target is a skip, not a crash.
+
+The linked file is otherwise completely ordinary: same preview, same variable
+inputs, same Create File button, same filename rules (`extension:` chain for
+templates, `target:` verbatim for agents), same flags/fence precedence (§7.5).
+Nothing about a file changes because an index happens to link it.
+
+### 8.5 Destinations — suggested, never forced
+
+Per step, in order, the user is offered:
+
+1. **The mirrored folder, first and pre-selected** — the folder the run was
+   started from, plus the link's own directory relative to the index. An index
+   at `Templates/react/index.md` linking `dir_2/subdir1/Button` invoked on
+   `src/app` suggests `src/app/dir_2/subdir1`. A bare Enter accepts it.
+2. **Each `paths:` entry** that `safeRelPath` accepts, in declaration order.
+3. **`Browse…`** — the existing folder navigator, rooted at the **workspace
+   folder** (not the clicked folder), so any folder in the project is reachable.
+
+Candidates are deduped by path, first occurrence wins. **Escape skips that one
+file** and the run continues to the next link. Missing folders are created,
+including intermediate levels — the destination is containment-checked against
+the workspace folder *before* the directory is created, and a destination
+outside it is skipped with a warning.
+
+Closing the preview panel **aborts** the whole run. A run always ends with one
+summary notification: `Multi-Template: 3 files written, 0 skipped.`
+
+### 8.6 Variable carry-over
+
+Values the user submits on one step are carried forward **in memory for the rest
+of the run**, pre-filling the same-named variable on later files:
+
+- Matching is on the **full `VK-xxx` token, exact and case-sensitive** — the same
+  rule Variable Sets use (§6).
+- A carried value **overrides that file's own default**; it does not lock the
+  input. The user always retains the final choice — only the default shown
+  changes.
+- Carry-over is **per run and in-memory by design**. Durable bundles are what
+  Variable Sets are for; nothing is written to the vault.
+
+### 8.7 Read-side only — the serializer never emits these keys
+
+Mirroring §7.4: `index` and `paths` are a **read-side format**. The parser reads
+them; `serializeArtifact` never writes them, and both are deliberately absent
+from `FRONTMATTER_KEY_ORDER` — a guard in `test/frontmatter-keys.test.ts` fails
+if either appears there, with a message naming this decision.
+
+Indexes are therefore **hand-authored** and edited through **Edit .md** (raw
+text), not through the create form. `parse(serialize(x))` is unaffected: a file
+that gains `index:` by hand keeps it because the serializer is never the thing
+that rewrites it.

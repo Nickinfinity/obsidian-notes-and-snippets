@@ -9,7 +9,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (675 passing)
+npm run test           # Compile + lint + run all tests (754 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -65,14 +65,17 @@ src/
 │   ├── vault.service.ts · context.service.ts     # Vault validation/detection; context keys
 │   ├── language-map.service.ts · render.service.ts  # mapLanguageId; renderCode(Rows)Html
 │   ├── varset.service.ts                 # Scanner, score, extractSubSets, applyVarSet, buildVarSetModel
+│   ├── multi-index.service.ts            # THE index link syntax + safeRelPath — buildIndexPlan,
+│   │                                     # buildDestCandidates, applyCarryOver (vscode-free)
 │   └── preview-mode.service.ts · temp-document.service.ts
 ├── ui/
 │   ├── panels/
 │   │   ├── artifactPicker.panel.ts   # Re-export shim (back-compat for insert.command.ts)
 │   │   ├── artifactPicker/           # Parts table under Architecture. navigator · codeBlock ·
-│   │   │                             # preview(.render/.clientJs/.helpers) · blockEditor ·
-│   │   │                             # fullEditor · varSetController · varSetDiff ·
-│   │   │                             # webviewSnippets · shared   (+ *.helpers.ts siblings)
+│   │   │                             # preview(.render/.clientJs/.helpers/.createFile/.batch) ·
+│   │   │                             # blockEditor · fullEditor · varSetController · varSetDiff ·
+│   │   │                             # multiIndex(.dest) · webviewSnippets · shared
+│   │   │                             # (+ *.helpers.ts siblings)
 │   │   ├── artifactForm/             # panel(.helpers) · form.html · form.blocks ·
 │   │   │                             # form.clientJs · form.helpers · shared
 │   │   └── settings.panel.ts · varsetPicker.panel.ts · destFolderPicker.panel.ts
@@ -81,12 +84,13 @@ src/
 ├── types/
 │   ├── constants.ts                  # ARTIFACTS · LANG_ALIAS · LANG_FENCE · LANG_EXT
 │   ├── parsed-artifact.types.ts      # ArtifactType union, ParsedArtifactFile, ParsedBlock, ParsedVar
+│   ├── multi-index.types.ts          # IndexStep · IndexPlan · DestCandidate · CarryOver · BatchOutcome
 │   └── artifact.types.ts · artifact-form.types.ts · varset.types.ts · webview-messages.types.ts
 ├── utils/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
 │   └── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 675 tests. fixtures/ + snapshots/
+test/                                 # 754 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
 └── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
@@ -133,6 +137,8 @@ regression this list exists to prevent; each is held by a named guard test.
 | Single-block restriction | `types/constants.ts` — `form.multiBlock`, read via `canMultiBlock` / `forcesSingleBlock` | `artifact-type-config.test.ts` — mirrors the flag, every create-form type |
 | Whole-file naming | `template.service.ts` — `resolveOutputFileName` | `template.service.test.ts` — agent `target:` verbatim vs template D3 chain |
 | Flag syntax (`%%oa:…%%`) | `flags.service.ts` — `extractFlaggedRegions` | `flags.service.test.ts` — no other `src/` file may spell the marker |
+| Index link + path syntax | `multi-index.service.ts` — `safeRelPath` (the sole rejection authority) | `multi-index.service.test.ts` — hostile inputs asserted through **both** callers |
+| Read-side-only frontmatter keys | `parser.service.ts` — `BOOLEAN_FRONTMATTER_KEYS` / `ARRAY_FRONTMATTER_KEYS`, absent from the serializer's `FRONTMATTER_KEY_ORDER` | `frontmatter-keys.test.ts` — the D11 guard: `index` / `paths` must never be emitted |
 
 **Context menus are driven by `constants.ts`, always.** An artifact's
 `contexts` field is the single source for *where* its command shows (editor /
@@ -326,6 +332,60 @@ filename comes from* is literally the same code — treat any new
 
 Adding a third whole-file type is therefore a `constants.ts` row plus one branch
 in `resolveOutputFileName` — nothing else.
+
+### Template indexes — batch scaffolding (`services/multi-index.service.ts`)
+
+A **template index** is an ordinary whole-file artifact carrying `index: true`
+whose body links sibling artifacts; one run scaffolds every linked file. Format,
+link syntaxes, rejection list and carry-over semantics:
+[`ARTIFACT_FILE_FORMAT.md` §8](ARTIFACT_FILE_FORMAT.md) — **authoritative**.
+
+**Additive by construction.** No new artifact type, vault directory, command or
+menu entry, and the two frontmatter keys are read-side only — so
+`package.json`, `types/constants.ts` and `artifact-serializer.service.ts` are
+absent from the feature's diff. That absence *is* the design proof; a change
+that needs to touch them is a different feature.
+
+| File | Owns |
+|---|---|
+| `services/multi-index.service.ts` | **THE** link syntax + `safeRelPath`. Pure, `vscode`-free: `isIndexArtifact`, `extractIndexLinks`, `resolveLinkTarget`, `buildIndexPlan`, `buildDestCandidates`, `applyCarryOver`, `summariseRun` |
+| `types/multi-index.types.ts` | `IndexStep` · `RejectedEntry` · `IndexPlan` · `DestCandidate` · `CarryOver` · `BatchOutcome` · `RunTally` — no `vscode` import (the runner's callback bag needs `Uri`, so it lives beside the runner) |
+| `artifactPicker/multiIndex.ts` | `MultiIndexRunner` — the **only** file doing I/O for the feature |
+| `artifactPicker/multiIndex.dest.ts` | `chooseStepDestination` — QuickPick over the candidates + a `Browse…` row deferring to `pickDestFolder` |
+| `artifactPicker/preview.batch.ts` | `BatchGate` — the one-shot promise the sequencer awaits |
+| `artifactPicker/preview.createFile.ts` | `runCreateFileFlow` — the Create File flow, extracted so one path serves single and batch writes |
+
+**The runner never imports `preview.ts`.** The preview step arrives as the
+`previewStep` callback in its bag, so the runner is testable without an
+extension host — the same callback-bag rule the picker's controllers follow.
+`navigator.ts` composes both, in **one** branch in the accept handler
+(`isIndexArtifact` → `runIndex`), placed between the parse and the multi-block
+check.
+
+**Non-obvious invariants:**
+- `BatchGate.settle()` nulls its resolver **before** calling it, because a
+  write, a cancel and a panel disposal can all fire for one step and only the
+  first may decide the outcome.
+- `runIndex` guards no-workspace and a cancelled destination **before** hiding
+  the QuickPick, or a cancelled palette invocation leaves the picker hidden with
+  no run behind it.
+- Every step runs inside its own try/catch: one bad link degrades to a skip with
+  a warning. Only an explicit `aborted` (the user closed the preview panel)
+  stops the run.
+- An index can never be written verbatim: the picker routes it to a run, and
+  `handleInsert` refuses a Create File click on a merely-hovered index.
+
+**🔒 Security — the one thing to re-check when touching this.** This is the
+extension's first recursive `createDirectory` into the user's *workspace*,
+driven by *vault*-authored text. Two containment assertions guard it and both
+sit immediately before the I/O they protect: the resolved link target must stay
+inside the index's own vault directory (before any read), and the chosen
+destination must stay inside the workspace folder (before `createDirectory`).
+The workspace check also covers the mirrored candidate, which is safe by
+construction and never re-validated by `safeRelPath` — so that assertion is its
+only guard. `safeRelPath` **rejects and never sanitises**, and there is no
+decode step, so an encoded traversal stays an inert literal segment. The IDE
+analyser does no taint analysis here; a manual trace is the only check.
 
 ### Flags — plain-markdown payloads (`services/flags.service.ts`)
 

@@ -49,6 +49,24 @@ export interface ParsedFrontmatter {
     model?: string;
     /** Model version string — **`type: agent` only** (e.g. `4.8`). */
     version?: string;
+    /**
+     * Marks the file as a **template index** — valid only on the whole-file types
+     * (`template` / `agent`), since a run can only write files. Its body lists
+     * links to sibling artifacts that one run scaffolds.
+     *
+     * **Read-side only:** the parser reads it, `serializeArtifact` never emits it
+     * (the create form does not author indexes). Bound by the guard in
+     * `test/frontmatter-keys.test.ts`.
+     */
+    index?: boolean;
+    /**
+     * Candidate destination folders offered for **every** link in an index,
+     * parsed from `paths: [src/components, packages/ui/src]`. Workspace-folder-
+     * relative and file-level; each entry is a suggestion the user may ignore.
+     *
+     * **Read-side only**, exactly as `index` above.
+     */
+    paths?: string[];
 }
 
 /**
