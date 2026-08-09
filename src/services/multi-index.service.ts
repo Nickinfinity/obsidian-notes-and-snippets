@@ -50,7 +50,7 @@ export function safeRelPath(raw: string): SafeRelPathResult {
     if (raw.startsWith('/')) { return { ok: false, reason: 'absolute path' }; }
 
     const segments = raw.split('/').filter(s => s !== '' && s !== '.');
-    if (segments.some(s => s === '..')) { return { ok: false, reason: 'contains a parent-directory ("..") segment' }; }
+    if (segments.includes('..')) { return { ok: false, reason: 'contains a parent-directory ("..") segment' }; }
     if (segments.length === 0) { return { ok: false, reason: 'empty path' }; }
 
     return { ok: true, relPath: segments.join('/') };
@@ -74,10 +74,16 @@ export function isIndexArtifact(fm: ParsedFrontmatter): boolean {
 }
 
 // A wikilink `[[target]]` (capture group 1) or a markdown link `[text](target)`
-// (capture group 2). The negative lookbehind keeps a markdown *image*
-// (`![alt](url)`) from being read as an index entry. Both bracket classes are
-// linear scans (`[^\]]+`, `[^)]+`) — no catastrophic-backtracking risk.
-const LINK_RE = /\[\[([^\]]+)\]\]|(?<!!)\[[^\]]*\]\(([^)]+)\)/g;
+// (capture group 2). The negative lookbehind fronts *both* forms so neither an
+// image (`![alt](url)`) nor an embed (`![[note]]`) is read as an index entry —
+// both display a note rather than nominate one to scaffold.
+//
+// Every class excludes its own opening delimiter (`[` in the bracket parts, `(`
+// in the URL part) and `\n`. That is what keeps the scan **linear**: a flood of
+// unclosed `[[[[…` or `[](` fails at the first character of each attempt rather
+// than scanning to end-of-input per start position, which is the quadratic
+// blow-up a vault-authored index body could otherwise trigger (S8786).
+const LINK_RE = /(?<!!)(?:\[\[([^[\]\n]+)\]\]|\[[^[\]\n]*\]\(([^()\n]+)\))/g;
 
 /**
  * Strips a wikilink's alias (`|`) and anchor (`#`) suffixes, keeping the target.

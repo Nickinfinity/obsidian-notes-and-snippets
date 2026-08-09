@@ -62,6 +62,33 @@ suite('extractIndexLinks', () => {
         assert.deepStrictEqual(extractIndexLinks('![alt](dir/pic.png)\n[[dir/a]]'), ['dir/a']);
     });
 
+    // The wikilink form must exclude embeds for the same reason the markdown
+    // form excludes images: `![[…]]` transcludes a note for display, it does not
+    // nominate a file to scaffold. Guards the asymmetry the two branches of
+    // LINK_RE would otherwise have.
+    test('an embedded wikilink (![[a]]) is not read as an index link', () => {
+        assert.deepStrictEqual(extractIndexLinks('![[dir/preview]]\n[[dir/a]]'), ['dir/a']);
+    });
+
+    test('an embedded image wikilink is not read as an index link', () => {
+        assert.deepStrictEqual(extractIndexLinks('![[dir/pic.png]]'), []);
+    });
+
+    // A target carrying `[` or `(` is unlinkable rather than silently truncated
+    // into a *different* path — the character-class exclusions that make these
+    // no-matches are the same ones that keep the scan linear on a hostile body.
+    test('a wikilink target containing "[" is not truncated into a different path', () => {
+        assert.deepStrictEqual(extractIndexLinks('[[dir/a[1]]]'), []);
+    });
+
+    test('a markdown link target containing "(" is not truncated into a different path', () => {
+        assert.deepStrictEqual(extractIndexLinks('[T](dir/a(1).md)'), []);
+    });
+
+    test('a link may not span a newline', () => {
+        assert.deepStrictEqual(extractIndexLinks('[[dir/a\nb]]'), []);
+    });
+
     test('an empty body yields no links', () => {
         assert.deepStrictEqual(extractIndexLinks(''), []);
     });
