@@ -6,6 +6,7 @@ import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js
 import { out } from './shared.js';
 import { ArtifactItem, buildItem, PREVIEW_DEBOUNCE_MS } from './navigator.helpers.js';
 import { PreviewPanelController, blockAsArtifact } from './preview.js';
+import type { InvocationSurface } from './preview.helpers.js';
 import { getVaultRootUri } from '../../../services/config.service.js';
 import { forcesSingleBlock } from '../../../services/artifact-type-config.service.js';
 import { isIndexArtifact } from '../../../services/multi-index.service.js';
@@ -29,16 +30,22 @@ import { chooseStepDestination } from './multiIndex.dest.js';
  * @param destUri      - The Explorer URI a Template was invoked on (folder or file),
  *                       forwarded to the Create File flow (D2). `undefined` for every
  *                       non-template invocation; the picker behaves exactly as before.
+ * @param surface      - Which context-menu surface the command was invoked from (T3),
+ *                       forwarded to `performInsert` for both-context types (`AIPrompt`).
+ *                       `registerInsertCommands` passes this explicitly for every
+ *                       registration — no default here, so a missing argument is a
+ *                       compile error rather than a silent editor insert.
  *
  * @example
- * await openArtifactPicker('Templates', 'Templates', context.extensionUri, storageUri, clickedUri);
+ * await openArtifactPicker('Templates', 'Templates', context.extensionUri, storageUri, clickedUri, 'editor');
  */
 export async function openArtifactPicker(
     artifactDir: string,
     artifactName: string,
     extensionUri: vscode.Uri,
     storageUri: vscode.Uri,
-    destUri?: vscode.Uri,
+    destUri: vscode.Uri | undefined,
+    surface: InvocationSurface,
 ): Promise<void> {
     const vaultRoot = getVaultRootUri();
 
@@ -58,7 +65,7 @@ export async function openArtifactPicker(
     }
 
     const targetEditor = vscode.window.activeTextEditor;
-    await new ArtifactNavigator(rootUri, artifactName, targetEditor, extensionUri, storageUri, destUri).run();
+    await new ArtifactNavigator(rootUri, artifactName, targetEditor, extensionUri, storageUri, destUri, surface).run();
 }
 
 // ── ArtifactNavigator ─────────────────────────────────────────────────────────
@@ -87,7 +94,8 @@ class ArtifactNavigator {
         targetEditor: vscode.TextEditor | undefined,
         extensionUri: vscode.Uri,
         storageUri: vscode.Uri,
-        private readonly destUri?: vscode.Uri,
+        private readonly destUri: vscode.Uri | undefined,
+        private readonly invocationSurface: InvocationSurface,
     ) {
         this.rootUri      = rootUri;
         this.currentDir   = rootUri;
@@ -109,6 +117,7 @@ class ArtifactNavigator {
             closePicker:  () => this.qp.hide(),
             storageUri,
             destUri,
+            invocationSurface: this.invocationSurface,
         });
     }
 

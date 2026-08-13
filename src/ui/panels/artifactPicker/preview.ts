@@ -7,7 +7,7 @@ import { PreviewModeController, type SectionKey } from '../../../services/previe
 import { getNonce } from '../../../utils/helpers.js';
 import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js';
 import { out } from './shared.js';
-import { POPUP_VIEW_TYPE, performInsert } from './preview.helpers.js';
+import { POPUP_VIEW_TYPE, performInsert, type InvocationSurface } from './preview.helpers.js';
 import { renderPreviewHtml, renderMultiBlockPreviewHtml, renderPopupEmptyHtml, mergeVarsWithDefaults } from './preview.render.js';
 import { FullEditController } from './fullEditor.js';
 import { BlockEditController } from './blockEditor.js';
@@ -35,6 +35,8 @@ export interface PreviewCallbacks {
     storageUri: vscode.Uri;
     /** Explorer URI a Template was invoked on (D2); `undefined` for non-template flows. */
     destUri?: vscode.Uri;
+    /** Which context-menu surface the insert command was invoked from (T3); threaded to `performInsert`. */
+    invocationSurface: InvocationSurface;
 }
 
 /**
@@ -302,7 +304,7 @@ export class PreviewPanelController {
         const code         = this.resolveInsertCode(msg, artifact);
         const resolvedVars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
 
-        performInsert(this.cb.targetEditor, { ...artifact, code }, resolvedVars);
+        void performInsert(this.cb.targetEditor, { ...artifact, code }, resolvedVars, this.cb.invocationSurface);
         this.fullEdit.teardown();
         void this.blockEdit.teardown();
         this.dispose();

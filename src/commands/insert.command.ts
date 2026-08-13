@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { ARTIFACTS } from '../types/constants.js';
+import type { Artifact } from '../types/artifact.types.js';
 import { openArtifactPicker } from '../ui/panels/artifactPicker.panel.js';
+import type { InvocationSurface } from '../ui/panels/artifactPicker/preview.helpers.js';
 
 /**
  * Derives the VS Code command ID for an artifact's insert command.
@@ -21,6 +23,28 @@ import { openArtifactPicker } from '../ui/panels/artifactPicker.panel.js';
  */
 export function artifactCommandId(dir: string): string {
     return `obsidian-artifacts.insert.${dir.toLowerCase()}`;
+}
+
+/**
+ * Derives the sibling command ID registered for the **terminal** context menu
+ * of a both-context artifact (`contexts` containing both `'editor'` and
+ * `'terminal'`, e.g. `AIPrompt`).
+ *
+ * `vscode.window.activeTerminal` is a recency value, not a focus predicate
+ * (VS Code exposes no terminal-focus API), so T3 cannot resolve the insert
+ * target from live focus state. Instead the invocation surface is captured
+ * statically: a distinct command ID per surface, wired to a distinct
+ * `package.json` menu entry, tells `performInsert` which menu the user
+ * actually clicked.
+ *
+ * @param dir - The artifact's `dir` field (e.g. `'AIPrompts'`).
+ * @returns The fully-qualified terminal-surface command ID string.
+ *
+ * @example
+ * artifactTerminalCommandId('AIPrompts') // → 'obsidian-artifacts.insert.aiprompts.terminal'
+ */
+export function artifactTerminalCommandId(dir: string): string {
+    return `${artifactCommandId(dir)}.terminal`;
 }
 
 /**
@@ -76,22 +100,34 @@ export function registerInsertCommands(context: vscode.ExtensionContext): void {
     // the always-defined globalStorageUri so block-edit temp files have a home.
     const storageUri = context.storageUri ?? context.globalStorageUri;
 
-    for (const artifact of ARTIFACTS) {
-        const commandId = artifactCommandId(artifact.dir);
-
-        // VS Code passes (uri, uris[]) to an Explorer context-menu command. Forward
-        // the invoked URI so the Template "Insert Template" flow can resolve
-        // its destination (D2); multi-select uses the first entry. Non-template
-        // commands are invoked without a URI and openArtifactPicker only consults
-        // destUri in the template create-file path — their behaviour is unchanged.
+    // VS Code passes (uri, uris[]) to an Explorer context-menu command. Forward
+    // the invoked URI so the Template "Insert Template" flow can resolve
+    // its destination (D2); multi-select uses the first entry. Non-template
+    // commands are invoked without a URI and openArtifactPicker only consults
+    // destUri in the template create-file path — their behaviour is unchanged.
+    const register = (commandId: string, artifact: Artifact, surface: InvocationSurface): void => {
         const disposable = vscode.commands.registerCommand(
             commandId,
             (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
                 const destUri = uris?.[0] ?? uri;
-                void openArtifactPicker(artifact.dir, artifact.name, context.extensionUri, storageUri, destUri);
+                void openArtifactPicker(artifact.dir, artifact.name, context.extensionUri, storageUri, destUri, surface);
             },
         );
-
         context.subscriptions.push(disposable);
+    };
+
+    for (const artifact of ARTIFACTS) {
+        // ponytail: the invocation surface is captured statically from which command id
+        // fired, not a live focus read — VS Code exposes no terminal-focus predicate, and
+        // a Command Palette invocation has no menu to speak of, so it defaults to 'editor'.
+        // Upgrade only if VS Code ever exposes a real terminal-focus API.
+        register(artifactCommandId(artifact.dir), artifact, 'editor');
+
+        // Both-context types (only AIPrompt today) get a dedicated terminal-surface
+        // command — package.json points the terminal menus at this id instead of the
+        // base one, so performInsert can tell which menu the user actually clicked (T3).
+        if (artifact.contexts.includes('editor') && artifact.contexts.includes('terminal')) {
+            register(artifactTerminalCommandId(artifact.dir), artifact, 'terminal');
+        }
     }
 }
