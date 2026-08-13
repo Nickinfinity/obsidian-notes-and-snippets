@@ -146,9 +146,9 @@ suite('artifact-type-config.service', () => {
         // to satisfy code drift. The helper derives the list from
         // ARTIFACTS[*].createForm === true. Adding a new createForm type
         // anywhere must extend the result automatically.
-        test('returns exactly [AIAgentsConfig, Snippet, Command, Template] (order-insensitive)', () => {
+        test('returns exactly [AIAgentsConfig, AIPrompt, Snippet, Command, Template] (order-insensitive)', () => {
             const sorted = [...getCreateFormTypes()].sort();
-            assert.deepStrictEqual(sorted, ['AIAgentsConfig', 'Command', 'Snippet', 'Template']);
+            assert.deepStrictEqual(sorted, ['AIAgentsConfig', 'AIPrompt', 'Command', 'Snippet', 'Template']);
         });
     });
 

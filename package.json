@@ -40,6 +40,11 @@
         "title": "Insert Template"
       },
       {
+        "command": "obsidian-artifacts.insert.aiprompts",
+        "category": "Obsidian Artifacts",
+        "title": "Insert AI Prompt"
+      },
+      {
         "command": "obsidian-artifacts.insert.variables",
         "category": "Obsidian Artifacts",
         "title": "See/Edit Variables"
@@ -85,6 +90,11 @@
           "group": "obsidian@1"
         },
         {
+          "command": "obsidian-artifacts.insert.aiprompts",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.editorHasMultiple",
+          "group": "obsidian@1"
+        },
+        {
           "command": "obsidian-artifacts.insert.variables",
           "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.variablesActive && !obsidian-artifacts.editorHasMultiple",
           "group": "obsidian@1"
@@ -104,6 +114,11 @@
         {
           "command": "obsidian-artifacts.insert.commands",
           "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.commandsActive && !obsidian-artifacts.terminalHasMultiple",
+          "group": "obsidian@1"
+        },
+        {
+          "command": "obsidian-artifacts.insert.aiprompts",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.terminalHasMultiple",
           "group": "obsidian@1"
         },
         {
@@ -151,6 +166,11 @@
           "group": "1_insert@1"
         },
         {
+          "command": "obsidian-artifacts.insert.aiprompts",
+          "when": "obsidian-artifacts.aipromptsActive",
+          "group": "1_insert@2"
+        },
+        {
           "command": "obsidian-artifacts.insert.variables",
           "when": "obsidian-artifacts.variablesActive",
           "group": "2_variables@1"
@@ -161,6 +181,11 @@
           "command": "obsidian-artifacts.insert.commands",
           "when": "obsidian-artifacts.commandsActive",
           "group": "1_insert@1"
+        },
+        {
+          "command": "obsidian-artifacts.insert.aiprompts",
+          "when": "obsidian-artifacts.aipromptsActive",
+          "group": "1_insert@2"
         },
         {
           "command": "obsidian-artifacts.insert.variables",
@@ -220,6 +245,11 @@
           "type": "boolean",
           "default": false,
           "description": "Enable the Templates directory (Explorer context menu — Insert Template)."
+        },
+        "obsidianArtifacts.features.aiprompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the AI Prompts directory. Auto-created on first vault selection."
         },
         "obsidianArtifacts.features.variables": {
           "type": "boolean",

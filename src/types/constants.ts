@@ -88,6 +88,29 @@ export const ARTIFACTS: ArtifactsArray = [
 		default: false,
 		contexts: ['all'],
 	},
+	{
+		type: 'AIPrompt',
+		name: 'AI Prompts',
+		dir: 'AIPrompts',
+		// Namesake of the feature — auto-created on first vault selection, like
+		// Snippets. A user who toggles it off has `false` written to settings, so
+		// it does not come back.
+		default: true,
+		// A prompt is pasted into a chat pane (editor) or a CLI agent (terminal).
+		// The only type declaring both, so it is the only one resolving its
+		// target surface at insert time.
+		contexts: ['editor', 'terminal'],
+		createForm: true,
+		form: {
+			// The payload is flagged markdown (the syntax `flags.service.ts`
+			// owns), so there is no language to pick — that service already
+			// defaults it to markdown.
+			language: { mode: 'hidden', default: 'markdown' },
+			label: { singular: 'AI prompt' },
+			// Flags' named regions already become ParsedBlocks; no new UI needed.
+			multiBlock: true,
+		},
+	},
 ];
 
 /**

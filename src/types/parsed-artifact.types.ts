@@ -2,7 +2,7 @@
  * All recognised artifact categories in the Obsidian vault.
  * Must match the `artifactType` field written in a file's YAML frontmatter.
  */
-export type ArtifactType = 'Snippet' | 'AIAgentsConfig' | 'Command' | 'Template' | 'Variables';
+export type ArtifactType = 'Snippet' | 'AIAgentsConfig' | 'Command' | 'Template' | 'Variables' | 'AIPrompt';
 
 /**
  * Structured representation of a vault file's YAML frontmatter block.
