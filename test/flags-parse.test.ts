@@ -11,10 +11,10 @@ import { resolveOutputFileName, validateSingleBlock } from '../src/services/temp
  * did before flags existed.
  */
 
-const ROOT = '/vault/AgentsConf';
-const FILE = '/vault/AgentsConf/reviewer.md';
+const ROOT = '/vault/AIAgentsConf';
+const FILE = '/vault/AIAgentsConf/reviewer.md';
 
-/** Parses vault content as an AgentsConf file. */
+/** Parses vault content as an AIAgentsConf file. */
 function parse(content: string) {
     return parseFromContent(content, FILE, ROOT);
 }
@@ -23,7 +23,7 @@ suite('flag-delimited payloads — single region', () => {
 
     const AGENT = [
         '---',
-        'type: agent',
+        'artifactType: AIAgentsConfig',
         'title: Code reviewer',
         'target: CLAUDE.md',
         '---',
@@ -61,7 +61,7 @@ suite('flag-delimited payloads — single region', () => {
     });
 
     test('an explicit frontmatter language still wins', () => {
-        const content = '---\ntype: agent\nlanguage: yaml\n---\n%%oa:start%%\nkey: value\n%%oa:end%%';
+        const content = '---\nartifactType: AIAgentsConfig\nlanguage: yaml\n---\n%%oa:start%%\nkey: value\n%%oa:end%%';
         assert.strictEqual(parse(content).frontmatter.language, 'yaml');
     });
 
@@ -71,7 +71,7 @@ suite('flag-delimited payloads — single region', () => {
 
     test('a ```vks fence outside the flags supplies the defaults', () => {
         const content = [
-            '---', 'type: agent', '---',
+            '---', 'artifactType: AIAgentsConfig', '---',
             '%%oa:start%%',
             'Review <VK-repo> on <VK-branch>.',
             '%%oa:end%%',
@@ -91,7 +91,7 @@ suite('flag-delimited payloads — single region', () => {
 suite('flag-delimited payloads — named regions become blocks', () => {
 
     const MULTI = [
-        '---', 'type: agent', 'title: Reviewer', '---',
+        '---', 'artifactType: AIAgentsConfig', 'title: Reviewer', '---',
         '%%oa:start Dev%%',
         'Review the dev branch of <VK-repo>.',
         '%%oa:end%%',
@@ -130,7 +130,7 @@ suite('flagged payloads flow through the whole-file (template + agent) path', ()
 
     test('an agent config needs no code fence at all — target: names the file, region is its content', () => {
         const content = [
-            '---', 'type: agent', 'title: Reviewer', 'target: CLAUDE.md', '---',
+            '---', 'artifactType: AIAgentsConfig', 'title: Reviewer', 'target: CLAUDE.md', '---',
             'notes',
             '%%oa:start%%',
             '# Reviewer',
@@ -146,13 +146,13 @@ suite('flagged payloads flow through the whole-file (template + agent) path', ()
     });
 
     test('a flagged template with no extension: falls back to .md via the markdown language', () => {
-        const content = '---\ntype: template\ntitle: Readme\n---\n%%oa:start%%\n# <VK-project>\n%%oa:end%%';
+        const content = '---\nartifactType: Template\ntitle: Readme\n---\n%%oa:start%%\n# <VK-project>\n%%oa:end%%';
         const parsed = parseFromContent(content, '/vault/Templates/readme.md', '/vault/Templates');
         assert.strictEqual(resolveOutputFileName(parsed), 'Readme.md');
     });
 
     test('two flagged regions are rejected by the single-block guard, naming the count', () => {
-        const content = '---\ntype: agent\n---\n%%oa:start A%%\none\n%%oa:end%%\n%%oa:start B%%\ntwo\n%%oa:end%%';
+        const content = '---\nartifactType: AIAgentsConfig\n---\n%%oa:start A%%\none\n%%oa:end%%\n%%oa:start B%%\ntwo\n%%oa:end%%';
         const res = validateSingleBlock(parse(content), 'agent config');
         assert.strictEqual(res.ok, false);
         if (!res.ok) { assert.ok(res.reason.includes('2'), `reason should name the count, got: ${res.reason}`); }
@@ -162,7 +162,7 @@ suite('flagged payloads flow through the whole-file (template + agent) path', ()
 suite('flags are optional for whole-file types (template + agent)', () => {
 
     test('a bare markdown agent note with no flags and no fence is the payload', () => {
-        const content = '---\ntype: agent\ntitle: Reviewer\ntarget: CLAUDE.md\n---\n\n# Reviewer\n\nBe terse with <VK-repo_name>.';
+        const content = '---\nartifactType: AIAgentsConfig\ntitle: Reviewer\ntarget: CLAUDE.md\n---\n\n# Reviewer\n\nBe terse with <VK-repo_name>.';
         const parsed = parse(content);
         assert.strictEqual(parsed.code, '# Reviewer\n\nBe terse with <VK-repo_name>.');
         assert.strictEqual(parsed.frontmatter.language, 'markdown');
@@ -171,7 +171,7 @@ suite('flags are optional for whole-file types (template + agent)', () => {
     });
 
     test('the vars section is not written into the payload', () => {
-        const content = '---\ntype: agent\n---\nBe terse with <VK-repo_name>.\n\nvars:\n```vks\nVK-repo_name=my-app\n```\n';
+        const content = '---\nartifactType: AIAgentsConfig\n---\nBe terse with <VK-repo_name>.\n\nvars:\n```vks\nVK-repo_name=my-app\n```\n';
         const parsed = parse(content);
         assert.strictEqual(parsed.code, 'Be terse with <VK-repo_name>.');
         assert.deepStrictEqual(parsed.vars, [{ name: 'VK-repo_name', defaultValue: 'my-app' }]);
@@ -179,12 +179,12 @@ suite('flags are optional for whole-file types (template + agent)', () => {
 
     /** No flags → nothing is chrome, so a `***` the author wrote is kept. */
     test('a flag-less note keeps its `***` — the rule is only ignored inside a region', () => {
-        const content = '---\ntype: agent\n---\nintro\n\n***\n\noutro';
+        const content = '---\nartifactType: AIAgentsConfig\n---\nintro\n\n***\n\noutro';
         assert.strictEqual(parse(content).code, 'intro\n\n***\n\noutro');
     });
 
     test('a template with no fence takes the whole body too', () => {
-        const content = '---\ntype: template\ntitle: Readme\n---\n# <VK-project_name>\n\nDocs go here.';
+        const content = '---\nartifactType: Template\ntitle: Readme\n---\n# <VK-project_name>\n\nDocs go here.';
         const parsed = parseFromContent(content, '/vault/Templates/readme.md', '/vault/Templates');
         assert.strictEqual(parsed.code, '# <VK-project_name>\n\nDocs go here.');
         assert.strictEqual(resolveOutputFileName(parsed), 'Readme.md');
@@ -192,18 +192,18 @@ suite('flags are optional for whole-file types (template + agent)', () => {
 
     /** The fallback must never outrank an actual code block. */
     test('an existing code fence still wins over the bare body', () => {
-        const content = '---\ntype: agent\n---\nPreamble prose.\n\n```md\nfenced payload\n```\n\nTrailing prose.';
+        const content = '---\nartifactType: AIAgentsConfig\n---\nPreamble prose.\n\n```md\nfenced payload\n```\n\nTrailing prose.';
         assert.strictEqual(parse(content).code, 'fenced payload');
     });
 
     test('a snippet with no fence does NOT take the bare body (insert types are unchanged)', () => {
-        const content = '---\ntype: snippet\n---\nJust some prose in a note.';
+        const content = '---\nartifactType: Snippet\n---\nJust some prose in a note.';
         const parsed = parseFromContent(content, '/vault/Snippets/x.md', '/vault/Snippets');
         assert.strictEqual(parsed.code, '', 'only whole-file types get the bare-markdown fallback');
     });
 
     test('flags still win when present', () => {
-        const content = '---\ntype: agent\n---\nexcluded\n%%oa:start%%\nincluded\n%%oa:end%%\nexcluded too';
+        const content = '---\nartifactType: AIAgentsConfig\n---\nexcluded\n%%oa:start%%\nincluded\n%%oa:end%%\nexcluded too';
         assert.strictEqual(parse(content).code, 'included');
     });
 });
@@ -211,7 +211,7 @@ suite('flags are optional for whole-file types (template + agent)', () => {
 suite('flags are additive — unflagged files are untouched', () => {
 
     test('a classic fenced single-block file parses exactly as before', () => {
-        const content = '---\ntype: snippet\nlanguage: javascript\n---\n\n```javascript\nconst x = <VK-name>;\n```\n\nvars:\nVK-name=hi\n';
+        const content = '---\nartifactType: Snippet\nlanguage: javascript\n---\n\n```javascript\nconst x = <VK-name>;\n```\n\nvars:\nVK-name=hi\n';
         const parsed = parseFromContent(content, '/vault/Snippets/x.md', '/vault/Snippets');
         assert.strictEqual(parsed.code, 'const x = <VK-name>;');
         assert.strictEqual(parsed.frontmatter.language, 'javascript');
@@ -226,7 +226,7 @@ suite('flags are additive — unflagged files are untouched', () => {
      */
     test('the legacy unfenced vars: section still parses in every spacing', () => {
         const file = (varsSection: string) =>
-            `---\ntype: snippet\n---\n\n\`\`\`js\nx = <VK-a>;\n\`\`\`\n\n${varsSection}`;
+            `---\nartifactType: Snippet\n---\n\n\`\`\`js\nx = <VK-a>;\n\`\`\`\n\n${varsSection}`;
         const varsOf = (varsSection: string) =>
             parseFromContent(file(varsSection), '/vault/Snippets/x.md', '/vault/Snippets').vars;
         const expected = [{ name: 'VK-a', defaultValue: '1' }];
@@ -237,7 +237,7 @@ suite('flags are additive — unflagged files are untouched', () => {
     });
 
     test('a classic ##-heading multi-block file still splits on headings', () => {
-        const content = '---\ntype: snippet\n---\n## Dev\n```bash\ndev\n```\n## Prod\n```bash\nprod\n```';
+        const content = '---\nartifactType: Snippet\n---\n## Dev\n```bash\ndev\n```\n## Prod\n```bash\nprod\n```';
         const parsed = parseFromContent(content, '/vault/Snippets/x.md', '/vault/Snippets');
         assert.deepStrictEqual(parsed.blocks.map(b => b.heading), ['Dev', 'Prod']);
     });
@@ -245,7 +245,7 @@ suite('flags are additive — unflagged files are untouched', () => {
     test('`##` headings inside a flagged region stay payload, not blocks', () => {
         // Flags win: the author already said where the artifact starts and ends.
         const content = [
-            '---', 'type: agent', '---',
+            '---', 'artifactType: AIAgentsConfig', '---',
             '%%oa:start%%',
             '## Style',
             '```md',

@@ -66,11 +66,11 @@ export function safeRelPath(raw: string): SafeRelPathResult {
  * @returns `true` only when `fm.index === true` and the type writes whole files.
  *
  * @example
- * isIndexArtifact({ type: 'template', index: true }); // → true
- * isIndexArtifact({ type: 'snippet', index: true });  // → false
+ * isIndexArtifact({ artifactType: 'Template', index: true }); // → true
+ * isIndexArtifact({ artifactType: 'Snippet', index: true });  // → false
  */
 export function isIndexArtifact(fm: ParsedFrontmatter): boolean {
-    return fm.index === true && writesWholeFile(fm.type);
+    return fm.index === true && writesWholeFile(fm.artifactType);
 }
 
 // A wikilink `[[target]]` (capture group 1) or a markdown link `[text](target)`

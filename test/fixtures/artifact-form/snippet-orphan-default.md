@@ -1,5 +1,5 @@
 ---
-type: snippet
+artifactType: Snippet
 title: Orphan Default Snippet
 description: Declares a variable default for a token not present in the code body.
 language: javascript

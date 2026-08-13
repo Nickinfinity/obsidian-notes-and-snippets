@@ -282,7 +282,7 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
 
   // ── Model extraction ─────────────────────────────────────────────────────
   function extractModel() {
-    const type      = blocksArea ? (blocksArea.dataset.type || 'snippet') : 'snippet';
+    const type      = blocksArea ? (blocksArea.dataset.type || 'Snippet') : 'Snippet';
     const title     = titleInput ? titleInput.value : '';
     const descEl    = document.getElementById('description');
     const desc      = descEl ? descEl.value : '';
@@ -319,7 +319,7 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
         };
       });
     }
-    return { type: type, title: title, description: desc, extension: extension, provider: provider, model: model, version: version, tags: tags.slice(), blocks: blocks };
+    return { artifactType: type, title: title, description: desc, extension: extension, provider: provider, model: model, version: version, tags: tags.slice(), blocks: blocks };
   }
 
   function extractVarsForBlock(blockIndex) {

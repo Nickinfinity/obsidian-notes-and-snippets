@@ -12,12 +12,12 @@ import { openArtifactPicker } from '../ui/panels/artifactPicker.panel.js';
  * artifact to `ARTIFACTS` requires adding a matching entry in `package.json` —
  * the TypeScript handler is registered automatically via the loop below.
  *
- * @param dir - The artifact's `dir` field (e.g. `'Snippets'`, `'AgentsConf'`).
+ * @param dir - The artifact's `dir` field (e.g. `'Snippets'`, `'AIAgentsConf'`).
  * @returns The fully-qualified VS Code command ID string.
  *
  * @example
  * artifactCommandId('Snippets')   // → 'obsidian-artifacts.insert.snippets'
- * artifactCommandId('AgentsConf') // → 'obsidian-artifacts.insert.agentsconf'
+ * artifactCommandId('AIAgentsConf') // → 'obsidian-artifacts.insert.aiagentsconf'
  */
 export function artifactCommandId(dir: string): string {
     return `obsidian-artifacts.insert.${dir.toLowerCase()}`;

@@ -193,7 +193,7 @@ export class VarSetController {
 function getVariablesDirUri(): vscode.Uri | null {
     const vaultRoot = getVaultRootUri();
     if (!vaultRoot) { return null; }
-    return vscode.Uri.joinPath(vaultRoot, getEntry('variables').dir);
+    return vscode.Uri.joinPath(vaultRoot, getEntry('Variables').dir);
 }
 
 // ── ParsedVar export — helps consumers avoid an extra import ─────────────────

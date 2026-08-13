@@ -17,7 +17,7 @@ const PATH = '/v/Templates/mod.md';
 
 function templateModel(extension?: string): ArtifactFormModel {
     return {
-        type: 'template',
+        artifactType: 'Template',
         title: 'Mod',
         description: '',
         tags: [],
@@ -31,13 +31,13 @@ function templateModel(extension?: string): ArtifactFormModel {
 suite('extension frontmatter — parser', () => {
 
     test('parses `extension: .mjs` into frontmatter.extension', () => {
-        const md = '---\ntype: template\ntitle: Mod\nextension: .mjs\nlanguage: javascript\n---\n\n```javascript\nexport const x = 1;\n```\n';
+        const md = '---\nartifactType: Template\ntitle: Mod\nextension: .mjs\nlanguage: javascript\n---\n\n```javascript\nexport const x = 1;\n```\n';
         const parsed = parseFromContent(md, PATH, ROOT);
         assert.strictEqual(parsed.frontmatter.extension, '.mjs');
     });
 
     test('extension key absent → frontmatter.extension is undefined', () => {
-        const md = '---\ntype: template\ntitle: Mod\nlanguage: javascript\n---\n\n```javascript\nx\n```\n';
+        const md = '---\nartifactType: Template\ntitle: Mod\nlanguage: javascript\n---\n\n```javascript\nx\n```\n';
         const parsed = parseFromContent(md, PATH, ROOT);
         assert.strictEqual(parsed.frontmatter.extension, undefined);
     });

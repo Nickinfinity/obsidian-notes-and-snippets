@@ -46,12 +46,12 @@ export const FREE_LANGUAGE_OPTIONS: readonly string[] = [
  * @returns A minimal, empty `ArtifactFormModel`.
  *
  * @example
- * defaultModel('snippet')
- * // → { type: 'snippet', title: '', description: '', tags: [], blocks: [{ heading: '', description: '', language: '', code: '', vars: [] }] }
+ * defaultModel('Snippet')
+ * // → { artifactType: 'Snippet', title: '', description: '', tags: [], blocks: [{ heading: '', description: '', language: '', code: '', vars: [] }] }
  */
 export function defaultModel(type: ArtifactType): ArtifactFormModel {
     return {
-        type,
+        artifactType: type,
         title:       '',
         description: '',
         tags:        [],
@@ -78,7 +78,7 @@ export function defaultModel(type: ArtifactType): ArtifactFormModel {
  * @returns Label string e.g. `'+ Add additional snippet'`.
  *
  * @example
- * labelForAddBlock('snippet') // → '+ Add additional snippet'
+ * labelForAddBlock('Snippet') // → '+ Add additional snippet'
  */
 export function labelForAddBlock(type: ArtifactType): string {
     return `+ Add additional ${getTypeSingular(type)}`;
@@ -93,7 +93,7 @@ export function labelForAddBlock(type: ArtifactType): string {
  * @returns Label string e.g. `'Delete entire snippet'`.
  *
  * @example
- * labelForDeleteEntire('command') // → 'Delete entire command'
+ * labelForDeleteEntire('Command') // → 'Delete entire command'
  */
 export function labelForDeleteEntire(type: ArtifactType): string {
     return `Delete entire ${getTypeSingular(type)}`;

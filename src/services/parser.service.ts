@@ -4,10 +4,11 @@ import { getAllTypes, getTypeForDir, writesWholeFile } from './artifact-type-con
 import { extractFlaggedRegions, type FlaggedRegion } from './flags.service.js';
 import type { ArtifactType, ParsedArtifactFile, ParsedBlock, ParsedFrontmatter, ParsedVar } from '../types/parsed-artifact.types.js';
 
-// Accepted `type` values — any unrecognised value keeps the 'snippet' fallback.
-// Derived from ARTIFACTS so a type added there is accepted here immediately;
-// as a hardcoded list this silently downgraded unlisted types to 'snippet'.
-// Guarded by the drift test in test/constants.test.ts.
+// Accepted `artifactType` values — any unrecognised value falls back to the
+// directory-derived default. Derived from ARTIFACTS so a type added there is
+// accepted here immediately; as a hardcoded list this silently downgraded
+// unlisted types to a hardcoded default. Guarded by the drift test in
+// test/constants.test.ts.
 const VALID_TYPES = new Set<string>(getAllTypes());
 
 // Frontmatter keys copied verbatim into `ParsedFrontmatter` (string-typed).
@@ -16,7 +17,7 @@ const VALID_TYPES = new Set<string>(getAllTypes());
  *
  * Exported so `test/frontmatter-keys.test.ts` can bind this list to the
  * serializer's `FRONTMATTER_KEY_ORDER`: a key the serializer emits but this set
- * (plus the specially-handled `type` and `tags`) does not know is silently
+ * (plus the specially-handled `artifactType` and `tags`) does not know is silently
  * dropped on the next read.
  */
 export const STRING_FRONTMATTER_KEYS = new Set<string>(['title', 'description', 'language', 'env', 'target', 'extension', 'provider', 'model', 'version']);
@@ -65,7 +66,7 @@ const FLAGGED_PAYLOAD_LANG = 'markdown';
  * @returns The body with any frontmatter block removed.
  *
  * @example
- * stripFrontmatter('---\ntype: snippet\n---\nbody') // → 'body'
+ * stripFrontmatter('---\nartifactType: Snippet\n---\nbody') // → 'body'
  */
 function stripFrontmatter(content: string): string {
     return content.replace(FRONTMATTER_STRIP_RE, '');
@@ -112,16 +113,18 @@ const VK_PAIR_RE = /<VK-([A-Za-z]\w*)><\/VK-\1>/g;
  * Extracts and parses the YAML frontmatter block from raw vault file content.
  *
  * Frontmatter must appear at the very start of the file between `---` fences.
- * Unknown keys are silently skipped; an invalid `type` value falls back to `'snippet'`.
+ * Unknown keys are silently skipped; an invalid `artifactType` value falls back
+ * to the directory-derived default (D1/D1e) — never a hardcoded literal, and
+ * never case-insensitively to a differently-cased spelling of a known value.
  *
  * @param content - Full UTF-8 string content of the `.md` file.
- * @returns Populated `ParsedFrontmatter`; returns `{ type: 'snippet' }` when no frontmatter is found.
+ * @returns Populated `ParsedFrontmatter`; returns `{ artifactType: defaultType }` when no frontmatter is found.
  *
  * @example
- * parseFrontmatter('---\ntype: template\ntitle: React Component\nlanguage: tsx\n---\n')
+ * parseFrontmatter('---\nartifactType: Template\ntitle: React Component\nlanguage: tsx\n---\n')
  */
-function parseFrontmatter(content: string, defaultType: ArtifactType = 'snippet'): ParsedFrontmatter {
-    const result: ParsedFrontmatter = { type: defaultType };
+function parseFrontmatter(content: string, defaultType: ArtifactType = 'Snippet'): ParsedFrontmatter {
+    const result: ParsedFrontmatter = { artifactType: defaultType };
     const match = FRONTMATTER_BLOCK_RE.exec(content);
     if (!match) { return result; }
 
@@ -147,11 +150,14 @@ function parseFrontmatter(content: string, defaultType: ArtifactType = 'snippet'
  * @param raw    - Trimmed raw value string.
  *
  * @example
- * applyFrontmatterField({ type: 'snippet' }, 'tags', '[a, b]')
+ * applyFrontmatterField({ artifactType: 'Snippet' }, 'tags', '[a, b]')
  */
 function applyFrontmatterField(result: ParsedFrontmatter, key: string, raw: string): void {
-    if (key === 'type') {
-        if (VALID_TYPES.has(raw)) { result.type = raw as ArtifactType; }
+    if (key === 'artifactType') {
+        // Exact match only — D1/D1e rules out a case-insensitive fallback, so
+        // `artifactType: snippet` (wrong case) never matches `'Snippet'` and
+        // falls through to the directory-derived default instead.
+        if (VALID_TYPES.has(raw)) { result.artifactType = raw as ArtifactType; }
         return;
     }
     if (ARRAY_FRONTMATTER_KEYS.has(key)) {
@@ -199,7 +205,7 @@ function parseInlineArray(raw: string): string[] {
  * @returns `{ code, fenceLang }` — code is `''` and fenceLang is `undefined` when no fence is found.
  *
  * @example
- * parseCodeBlock('---\ntype: snippet\n---\n\n```javascript\nconsole.log("hi");\n```')
+ * parseCodeBlock('---\nartifactType: Snippet\n---\n\n```javascript\nconsole.log("hi");\n```')
  */
 function parseCodeBlock(content: string): { code: string; fenceLang?: string } {
     // Strip frontmatter before scanning to avoid matching a fence inside it
@@ -239,7 +245,7 @@ function parseVarLines(raw: string): ParsedVar[] {
  * Locates and parses the variables section from raw vault file content.
  *
  * Two formats are supported, tried in priority order:
- * 1. **Fenced block** — ` ```vks\nKEY=val\n``` ` (standard for `type: variables` files).
+ * 1. **Fenced block** — ` ```vks\nKEY=val\n``` ` (standard for `artifactType: Variables` files).
  * 2. **Unfenced section** — a `vars:` or `vars` label on its own line followed by
  *    `KEY=value` pairs, placed after the ` ```code` block.
  *
@@ -252,7 +258,7 @@ function parseVarLines(raw: string): ParsedVar[] {
  * parseVars('...\n```javascript\n...\n```\n\nvars:\nroute=/test\n')
  */
 function parseVars(content: string): ParsedVar[] {
-    // Priority 1: fenced ```vks block — used by type: variables files
+    // Priority 1: fenced ```vks block — used by artifactType: Variables files
     const fenced = VKS_FENCE_RE.exec(content);
     if (fenced) { return parseVarLines(fenced[1]); }
 
@@ -348,7 +354,7 @@ export function resolveVars(code: string, vars: Record<string, string>): string 
  * @returns Ordered array of `ParsedBlock` objects, or `[]` for single-block files.
  *
  * @example
- * parseBlocks('---\ntype: snippet\n---\n## Dev\ndev server\n```bash\nhttp://<VK-host>\n```\n## Prod\n```bash\nhttp://prod.example.com\n```')
+ * parseBlocks('---\nartifactType: Snippet\n---\n## Dev\ndev server\n```bash\nhttp://<VK-host>\n```\n## Prod\n```bash\nhttp://prod.example.com\n```')
  */
 
 export function parseBlocks(content: string): ParsedBlock[] {
@@ -471,9 +477,9 @@ function mergeVarDefaults(detected: ParsedVar[], defaults: ParsedVar[]): ParsedV
  * parseFromContent(content, uri.fsPath, rootUri.fsPath);
  */
 export function parseFromContent(content: string, filePath: string, artifactRootDir: string): ParsedArtifactFile {
-    // A file with no `type:` is typed by the directory it was filed in — vault
+    // A file with no `artifactType:` is typed by the directory it was filed in — vault
     // files routinely carry no frontmatter at all, and without this a
-    // `Commands/` file parsed as 'snippet' and inserted at the cursor instead
+    // `Commands/` file parsed as 'Snippet' and inserted at the cursor instead
     // of being sent to the terminal.
     const frontmatter = parseFrontmatter(content, getTypeForDir(path.basename(artifactRootDir)));
 
@@ -485,7 +491,7 @@ export function parseFromContent(content: string, filePath: string, artifactRoot
     const regions = extractFlaggedRegions(stripFrontmatter(content));
     const payload = regions.length > 0
         ? readFlaggedPayload(regions, content)
-        : readUnflaggedPayload(content, frontmatter.type);
+        : readUnflaggedPayload(content, frontmatter.artifactType);
 
     if (!frontmatter.language && payload.fenceLang) { frontmatter.language = payload.fenceLang; }
     return {
@@ -515,7 +521,7 @@ interface ParsedPayload {
  * @returns Code, fence language, explicit vars, and `##` blocks.
  *
  * @example
- * readFencedPayload('---\ntype: snippet\n---\n```js\nx\n```')
+ * readFencedPayload('---\nartifactType: Snippet\n---\n```js\nx\n```')
  */
 function readFencedPayload(content: string): ParsedPayload {
     const { code, fenceLang } = parseCodeBlock(content);
@@ -540,7 +546,7 @@ function readFencedPayload(content: string): ParsedPayload {
  * @returns The payload fields for a flag-less file.
  *
  * @example
- * readUnflaggedPayload('---\ntype: agent\n---\nBe terse.', 'agent')
+ * readUnflaggedPayload('---\nartifactType: AIAgentsConfig\n---\nBe terse.', 'AIAgentsConfig')
  * // → { code: 'Be terse.', fenceLang: 'markdown', … }
  */
 function readUnflaggedPayload(content: string, type: ArtifactType): ParsedPayload {

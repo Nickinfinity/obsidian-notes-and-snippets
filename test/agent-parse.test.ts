@@ -10,7 +10,7 @@ suite('agent frontmatter parsing — provider/model/version', () => {
 
     const AGENT_MD = [
         '---',
-        'type: agent',
+        'artifactType: AIAgentsConfig',
         'title: Code reviewer',
         'provider: Claude',
         'model: Opus',
@@ -24,16 +24,16 @@ suite('agent frontmatter parsing — provider/model/version', () => {
     ].join('\n');
 
     test('reads provider/model/version off an agent file', () => {
-        const parsed = parseFromContent(AGENT_MD, '/vault/AgentsConf/reviewer.md', '/vault/AgentsConf');
-        assert.strictEqual(parsed.frontmatter.type, 'agent');
+        const parsed = parseFromContent(AGENT_MD, '/vault/AIAgentsConf/reviewer.md', '/vault/AIAgentsConf');
+        assert.strictEqual(parsed.frontmatter.artifactType, 'AIAgentsConfig');
         assert.strictEqual(parsed.frontmatter.provider, 'Claude');
         assert.strictEqual(parsed.frontmatter.model, 'Opus');
         assert.strictEqual(parsed.frontmatter.version, '4.8');
     });
 
     test('leaves the keys undefined when the file omits them', () => {
-        const md = '---\ntype: agent\ntitle: Bare\n---\n\n```md\nhi\n```\n';
-        const parsed = parseFromContent(md, '/vault/AgentsConf/bare.md', '/vault/AgentsConf');
+        const md = '---\nartifactType: AIAgentsConfig\ntitle: Bare\n---\n\n```md\nhi\n```\n';
+        const parsed = parseFromContent(md, '/vault/AIAgentsConf/bare.md', '/vault/AIAgentsConf');
         assert.strictEqual(parsed.frontmatter.provider, undefined);
         assert.strictEqual(parsed.frontmatter.model, undefined);
         assert.strictEqual(parsed.frontmatter.version, undefined);

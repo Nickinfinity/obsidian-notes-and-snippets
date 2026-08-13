@@ -50,7 +50,7 @@ suite('writeArtifact', () => {
         const vaultRoot = makeTmpDir();
         const result = await writeArtifact({
             vaultRoot,
-            type: 'snippet',
+            type: 'Snippet',
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Snippets'),
             fileName: 'my-snippet',
             content: 'hello',
@@ -64,7 +64,7 @@ suite('writeArtifact', () => {
         const vaultRoot = makeTmpDir();
         const result = await writeArtifact({
             vaultRoot,
-            type: 'command',
+            type: 'Command',
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Commands'),
             fileName: 'deploy',
             content: 'echo deploy',
@@ -80,7 +80,7 @@ suite('writeArtifact', () => {
         const vaultRoot = makeTmpDir();
         const result = await writeArtifact({
             vaultRoot,
-            type: 'snippet',
+            type: 'Snippet',
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Snippets'),
             fileName: 'my-snippet',
             content: 'x',
@@ -95,7 +95,7 @@ suite('writeArtifact', () => {
         await vscode.workspace.fs.createDirectory(nestedDir);
         const result = await writeArtifact({
             vaultRoot,
-            type: 'snippet',
+            type: 'Snippet',
             chosenDir: nestedDir,
             fileName: 'route',
             content: 'x',
@@ -111,7 +111,7 @@ suite('writeArtifact', () => {
         const content = '---\ntype: snippet\n---\n\n```javascript\nconsole.log("hi");\n```\n';
         const result = await writeArtifact({
             vaultRoot,
-            type: 'snippet',
+            type: 'Snippet',
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Snippets'),
             fileName: 'hi',
             content,
@@ -127,7 +127,7 @@ suite('writeArtifact', () => {
         const vaultRoot = makeTmpDir();
         const args = {
             vaultRoot,
-            type: 'snippet' as const,
+            type: 'Snippet' as const,
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Snippets'),
             fileName: 'existing',
             content: 'original',
@@ -141,7 +141,7 @@ suite('writeArtifact', () => {
         const vaultRoot = makeTmpDir();
         const args = {
             vaultRoot,
-            type: 'snippet' as const,
+            type: 'Snippet' as const,
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Snippets'),
             fileName: 'keep-me',
             content: 'original content',
@@ -159,7 +159,7 @@ suite('writeArtifact', () => {
         const vaultRoot = makeTmpDir();
         const args = {
             vaultRoot,
-            type: 'snippet' as const,
+            type: 'Snippet' as const,
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Snippets'),
             fileName: 'overwrite-me',
             content: 'original',
@@ -179,7 +179,7 @@ suite('writeArtifact', () => {
         const outsideDir = makeTmpDir();  // a completely separate temp dir
         const result = await writeArtifact({
             vaultRoot,
-            type: 'snippet',
+            type: 'Snippet',
             chosenDir: outsideDir,
             fileName: 'evil',
             content: 'x',
@@ -194,7 +194,7 @@ suite('writeArtifact', () => {
         const editorsBefore = vscode.window.visibleTextEditors.length;
         await writeArtifact({
             vaultRoot,
-            type: 'snippet',
+            type: 'Snippet',
             chosenDir: vscode.Uri.joinPath(vaultRoot, 'Snippets'),
             fileName: 'silent-write',
             content: 'x',

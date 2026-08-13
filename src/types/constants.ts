@@ -20,7 +20,7 @@ import type { ArtifactsArray } from './artifact.types.js';
  */
 export const ARTIFACTS: ArtifactsArray = [
 	{
-		type: 'snippet',
+		type: 'Snippet',
 		name: 'Snippets',
 		dir: 'Snippets',
 		default: true,
@@ -33,9 +33,9 @@ export const ARTIFACTS: ArtifactsArray = [
 		},
 	},
 	{
-		type: 'agent',
-		name: 'Agents Config',
-		dir: 'AgentsConf',
+		type: 'AIAgentsConfig',
+		name: 'AI Agents Config',
+		dir: 'AIAgentsConf',
 		default: true,
 		contexts: ['explorer'],
 		createForm: true,
@@ -52,7 +52,7 @@ export const ARTIFACTS: ArtifactsArray = [
 		},
 	},
 	{
-		type: 'command',
+		type: 'Command',
 		name: 'Commands',
 		dir: 'Commands',
 		default: false,
@@ -65,7 +65,7 @@ export const ARTIFACTS: ArtifactsArray = [
 		},
 	},
 	{
-		type: 'template',
+		type: 'Template',
 		name: 'Templates',
 		dir: 'Templates',
 		default: false,
@@ -82,7 +82,7 @@ export const ARTIFACTS: ArtifactsArray = [
 		},
 	},
 	{
-		type: 'variables',
+		type: 'Variables',
 		name: 'Variables',
 		dir: 'Variables',
 		default: false,

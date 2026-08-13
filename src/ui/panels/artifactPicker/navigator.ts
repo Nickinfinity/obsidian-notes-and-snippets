@@ -284,7 +284,7 @@ class ArtifactNavigator {
      * this.isMultiBlockNav(artifact) ? showMultiBlockPreview(artifact) : showPreview(artifact)
      */
     private isMultiBlockNav(artifact: ParsedArtifactFile): boolean {
-        return artifact.blocks.length > 1 && !forcesSingleBlock(artifact.frontmatter.type);
+        return artifact.blocks.length > 1 && !forcesSingleBlock(artifact.frontmatter.artifactType);
     }
 
     // ── Parsing & cache ───────────────────────────────────────────────────────

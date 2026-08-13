@@ -11,7 +11,7 @@ import type { ArtifactFormModel } from '../src/types/artifact-form.types.js';
  */
 function agentModel(over: Partial<ArtifactFormModel> = {}): ArtifactFormModel {
     return {
-        type:        'agent',
+        artifactType: 'AIAgentsConfig',
         title:       'Code reviewer',
         description: '',
         provider:    'Claude',
@@ -48,9 +48,9 @@ suite('agent serialization — provider/model/version', () => {
 
     // ── Security: newline key-injection ──────────────────────────────────────
     test('single-lines a newline-injection provider so no sibling key re-parses', () => {
-        const md = serializeArtifact(agentModel({ provider: 'x\ntype: command' }));
-        const reparsed = parseFromContent(md, '/vault/AgentsConf/x.md', '/vault/AgentsConf');
-        assert.strictEqual(reparsed.frontmatter.type, 'agent', 'type not overridden by injected key');
-        assert.ok(!md.includes('\ntype: command'), 'newline stripped — no injected frontmatter line');
+        const md = serializeArtifact(agentModel({ provider: 'x\nartifactType: Command' }));
+        const reparsed = parseFromContent(md, '/vault/AIAgentsConf/x.md', '/vault/AIAgentsConf');
+        assert.strictEqual(reparsed.frontmatter.artifactType, 'AIAgentsConfig', 'artifactType not overridden by injected key');
+        assert.ok(!md.includes('\nartifactType: Command'), 'newline stripped — no injected frontmatter line');
     });
 });

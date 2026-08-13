@@ -1,5 +1,5 @@
 ---
-type: template
+artifactType: Template
 title: Button Test
 extension: .tsx
 ---

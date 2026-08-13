@@ -293,7 +293,7 @@ export class PreviewPanelController {
         }
         // Templates/agent configs write a whole file instead of inserting at the
         // cursor; `writesWholeFile` is the single source shared with the label.
-        if (writesWholeFile(artifact.frontmatter.type)) {
+        if (writesWholeFile(artifact.frontmatter.artifactType)) {
             void this.handleCreateFile(msg, artifact);
             return;
         }

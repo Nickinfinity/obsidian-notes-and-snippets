@@ -83,9 +83,9 @@ export function blockAsArtifact(block: ParsedBlock, parent: ParsedArtifactFile):
 /**
  * Substitutes variables and delivers resolved content to the editor, terminal, or clipboard.
  *
- * For `type: command` artifacts the resolved text is sent to the active terminal (created
- * if absent). For all other types the text is inserted at the cursor; if no editor is open
- * it falls back to the clipboard with an informational message.
+ * For `artifactType: Command` artifacts the resolved text is sent to the active terminal
+ * (created if absent). For all other types the text is inserted at the cursor; if no
+ * editor is open it falls back to the clipboard with an informational message.
  *
  * @param editor   - Active text editor to insert into, or `undefined` when none is open.
  * @param artifact - Artifact supplying the code template and type.
@@ -100,7 +100,7 @@ export function performInsert(
     vars: Record<string, string>
 ): void {
     const content = resolveVars(artifact.code, vars);
-    if (artifact.frontmatter.type === 'command') {
+    if (artifact.frontmatter.artifactType === 'Command') {
         const terminal = vscode.window.activeTerminal ?? vscode.window.createTerminal('Obsidian Artifacts');
         terminal.sendText(content, false);
         terminal.show(true);
