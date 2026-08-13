@@ -113,6 +113,7 @@ ${styleLinkTags(cssUri)}
   </div>
   <div class="actions">
     <button class="btn btn-insert"    id="insertBtn">${primaryLabel}</button>
+    <button class="btn btn-secondary" id="copyBtn">Copy</button>
     <button class="btn btn-secondary" id="editBlockBtn">Edit Block</button>
     <button class="btn btn-secondary" id="editBtn">Edit .md</button>
     <button class="btn btn-cancel"    id="cancelBtn">Cancel</button>
