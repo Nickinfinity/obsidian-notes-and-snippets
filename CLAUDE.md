@@ -499,10 +499,23 @@ npm test
 
 Rules, edge cases, and the vars interaction: [`ARTIFACT_FILE_FORMAT.md` §7](ARTIFACT_FILE_FORMAT.md).
 
-### No runtime dependencies
+### One runtime dependency
 
-Only the VS Code API and Node `fs`/`path` — no third-party packages. Keep it
-that way; the ladder is reuse → stdlib → native before any new dep.
+`highlight.js` — imported by `render.service.ts` for code-preview highlighting,
+and the only entry in `dependencies`. Everything else is the VS Code API and
+Node `fs`/`path`. Keep it that way; the ladder is reuse → stdlib → native
+before any new dep.
+
+*(This section previously claimed "no third-party packages" while `highlight.js`
+was already in `dependencies` — the same stale-invariant failure the Invariants
+section below is about. Corrected rather than left to mislead.)*
+
+**Packaging caveat.** `npx vsce ls` fails on this repo with `npm error
+ELSPROBLEMS`: `vsce` shells out to `npm list --production`, which cannot read
+pnpm's `node_modules` layout and walks `highlight.js`'s own devDependencies.
+Use **`npx vsce ls --no-dependencies`** for the `.vscodeignore` check below.
+A real `vsce package` will need this resolved — either an npm-compatible
+install or `--no-dependencies` with the dependency bundled another way.
 
 ---
 
@@ -634,7 +647,10 @@ Messages are in the single protocol table above.
 
 - `activationEvents: []` in `package.json` — the extension activates on every window open. Narrow this to specific command events once commands stabilise.
 - Compiled output goes to `dist/` and is **gitignored**. Run `npm run compile` after cloning.
-- `media/` ships in the packaged extension. `src/`, `test/`, and `dist/test/` are excluded via `.vscodeignore` — **except `!src/ui/*.css`**, which must stay a glob. The webviews load stylesheets from source, so a named exception silently ships a CSS-less extension when a sheet is added or renamed, and the suite stays green because tests run from source. Verify with `npx vsce ls | grep css`.
+- `media/` ships in the packaged extension. `src/`, `test/`, and `dist/test/` are excluded via `.vscodeignore` — **except `!src/ui/*.css`**, which must stay a glob. The webviews load stylesheets from source, so a named exception silently ships a CSS-less extension when a sheet is added or renamed, and the suite stays green because tests run from source. Verify with `npx vsce ls --no-dependencies | grep css`, which must list all
+seven sheets. The `--no-dependencies` flag is not optional here — see the
+packaging caveat above; without it `vsce` exits non-zero and `grep` finds
+nothing, which reads exactly like a missing-CSS failure.
 - All imports use explicit `.js` extensions (e.g. `'./helpers.js'`) — required by `Node16` module resolution even for `.ts` source files.
 - Webview `localResourceRoots` is restricted to `extensionUri/src/ui` — all webview assets must live in `src/ui/`.
 
