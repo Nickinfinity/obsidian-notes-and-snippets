@@ -59,6 +59,10 @@
         "title": "Obsidian Artifacts: Create Artifact"
       },
       {
+        "command": "obsidian-artifacts.migrateFrontmatter",
+        "title": "Obsidian Artifacts: Migrate Vault Frontmatter"
+      },
+      {
         "command": "obsidian-artifacts.create.fromSelection.snippet",
         "title": "Obsidian Artifacts: Create Snippet from Selection"
       },

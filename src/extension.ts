@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { registerOpenSettingsCommand } from './commands/openSettings.command.js';
 import { registerInsertCommands } from './commands/insert.command.js';
 import { registerCreateCommands } from './commands/create.command.js';
+import { registerMigrateCommand } from './commands/migrate.command.js';
 import { refreshVaultContext } from './services/context.service.js';
 import { createVaultDirectory } from './services/vault.service.js';
 import { sweepBlockEditOrphans } from './ui/panels/artifactPicker/blockEditor.js';
@@ -22,6 +23,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerOpenSettingsCommand(context);
 	registerInsertCommands(context);
 	registerCreateCommands(context);
+	registerMigrateCommand(context);
 
 	// Clean up any block-edit temp files orphaned by a previous crash / hard-close.
 	void sweepBlockEditOrphans(context.storageUri ?? context.globalStorageUri);

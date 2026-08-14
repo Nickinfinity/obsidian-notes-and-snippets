@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { getEntry } from './artifact-type-config.service.js';
+import { isPathWithin } from '../utils/path-containment.js';
 import type { ArtifactType } from '../types/parsed-artifact.types.js';
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -107,8 +108,7 @@ export async function writeArtifact(args: WriteArgs): Promise<WriteResult> {
  * isWithinRoot(vaultRoot, vscode.Uri.file('/other/dir'))              // false
  */
 function isWithinRoot(root: vscode.Uri, candidate: vscode.Uri): boolean {
-    const rootPath = root.fsPath.endsWith(path.sep) ? root.fsPath : root.fsPath + path.sep;
-    return candidate.fsPath === root.fsPath || candidate.fsPath.startsWith(rootPath);
+    return isPathWithin(root.fsPath, candidate.fsPath);
 }
 
 /**
