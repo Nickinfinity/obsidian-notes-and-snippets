@@ -2,6 +2,38 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Branching and pull requests
+
+**Work happens on `feature/<slug>`. Pull requests always target `develop` — never
+`main`.**
+
+`main` is the release branch and is protected (PR required, one code-owner
+approval, no force-pushes). It receives changes only by promoting `develop`, not
+from feature branches directly. Opening a feature PR against `main` is the wrong
+base even when the diff is correct, and neither way out is free:
+
+- **Revert the merge.** Respects protection, but leaves those commits as
+  ancestors of `main` — so a later `develop` → `main` promotion sees them as
+  already merged and **silently does not reapply them**. Recovering needs a
+  revert-of-the-revert on the promoting PR.
+- **Rewind `main`.** Clean, and leaves no trap, but requires an admin to lift
+  `allow_force_pushes`, force-push, and restore protection. Capture the full
+  protection payload *before* lifting it and diff it back afterwards — the
+  GitHub API takes a whole-object `PUT`, so a partial payload silently drops
+  settings.
+
+This happened once (PR #7, rewound on 2026-08-18). Check the base before opening
+the PR; it costs nothing then.
+
+```
+feature/<slug>  ──PR──▶  develop  ──PR──▶  main
+```
+
+Everything else in `CREATING_A_PLAN.md` still holds — per-wave commits, ticket
+ids leading the subject, `git rm -r docs` before the PR.
+
+---
+
 ## Commands
 
 ```bash
