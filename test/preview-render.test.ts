@@ -379,7 +379,7 @@ suite('renderPreviewHtml — Phase 6 render-level golden', () => {
         fileName:     'demo',
         relativePath: 'demo.md',
         frontmatter: {
-            artifactType: 'Snippet',
+            type:        'snippet',
             title:       'Demo Snippet',
             description: 'A demo artifact for golden tests.',
             language:    'javascript',
@@ -442,47 +442,5 @@ suite('renderPreviewHtml — Phase 6 render-level golden', () => {
         const html = renderPopupEmptyHtml('https://test-css-uri/styles.css', 'https://test-csp-source');
         assert.ok(!html.includes('<script'));
         assert.ok(html.includes('Select a file to preview'));
-    });
-});
-
-// ── T6: primary-button label is type-aware ────────────────────────────────────
-
-/**
- * The only per-type rendering difference for the interactive preview: a template
- * writes a whole file (Create File), everything else inserts (Insert). The
- * snippet golden above is the tripwire proving the branch did not leak wider.
- */
-suite('renderPreviewHtml — Create File button for templates', () => {
-
-    function render(artifactType: 'Snippet' | 'Template' | 'AIAgentsConfig'): string {
-        const artifact: ParsedArtifactFile = {
-            filePath:     '/vault/Templates/comp.md',
-            fileName:     'comp',
-            relativePath: 'comp.md',
-            frontmatter:  { artifactType, title: 'Comp', language: 'typescriptreact' },
-            code:         'export const Comp = () => null;',
-            vars:         [],
-            blocks:       [],
-        };
-        const rows = renderCodeRowsHtml(artifact.code, artifact.frontmatter.language);
-        return renderPreviewHtml(artifact, rows, 'n', 'css', 'csp', {});
-    }
-
-    test('a template artifact labels the primary button "Create File"', () => {
-        const html = render('Template');
-        assert.match(html, /id="insertBtn">Create File<\/button>/);
-        assert.ok(!/id="insertBtn">Insert<\/button>/.test(html));
-    });
-
-    test('an agent artifact labels the primary button "Create File"', () => {
-        const html = render('AIAgentsConfig');
-        assert.match(html, /id="insertBtn">Create File<\/button>/);
-        assert.ok(!/id="insertBtn">Insert<\/button>/.test(html));
-    });
-
-    test('a cursor-insert artifact still labels it "Insert"', () => {
-        const html = render('Snippet');
-        assert.match(html, /id="insertBtn">Insert<\/button>/);
-        assert.ok(!/Create File/.test(html));
     });
 });

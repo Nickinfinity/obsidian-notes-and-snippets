@@ -47,21 +47,21 @@ export interface BuildFormHtmlArgs {
  */
 export function buildFormHtml(args: BuildFormHtmlArgs): string {
     const { model, cspSource, cssUri, nonce, codeBlockHtml } = args;
-    const languageMode = getLanguageMode(model.artifactType);
-    const lockedLang   = getDefaultLanguage(model.artifactType);
+    const languageMode = getLanguageMode(model.type);
+    const lockedLang   = getDefaultLanguage(model.type);
     const multi        = model.blocks.length > 1;
-    const multiAllowed = canMultiBlock(model.artifactType);
+    const multiAllowed = canMultiBlock(model.type);
 
-    const singular     = getTypeSingular(model.artifactType);
+    const singular     = getTypeSingular(model.type);
     const head         = buildHead(nonce, cspSource, cssUri);
     const frontmatter  = buildFrontmatterSection(model);
     const blocksArea   = multi
         ? buildMultiBlockArea(model, languageMode, lockedLang, codeBlockHtml)
         : buildSingleBlockContent(model.blocks[0], 0, languageMode, lockedLang, codeBlockHtml);
-    const addBtn       = multiAllowed ? buildAddBlockButton(model.artifactType) : '';
-    const footer       = buildFooter(model.artifactType);
+    const addBtn       = multiAllowed ? buildAddBlockButton(model.type) : '';
+    const footer       = buildFooter(model.type);
     const areaClass    = `blocks-area${multi ? ' multi-block' : ''}`;
-    const areaAttrs    = `id="blocks-area" class="${areaClass}" data-lang-mode="${escHtml(languageMode)}" data-default-lang="${escHtml(lockedLang)}" data-type="${escHtml(model.artifactType)}" data-singular="${escHtml(singular)}"`;
+    const areaAttrs    = `id="blocks-area" class="${areaClass}" data-lang-mode="${escHtml(languageMode)}" data-default-lang="${escHtml(lockedLang)}" data-type="${escHtml(model.type)}" data-singular="${escHtml(singular)}"`;
 
     const scriptTag = args.clientJs
         ? buildScriptTag(nonce, args.clientJs)
@@ -147,80 +147,12 @@ function buildFrontmatterSection(model: ArtifactFormModel): string {
   <label class="slabel" for="description">Description</label>
   <textarea id="description" class="form-input form-textarea" rows="2" placeholder="Optional description">${descVal}</textarea>
 </div>
-${buildExtensionField(model)}${buildAgentFieldsSection(model)}<div class="form-section">
+<div class="form-section">
   <div class="slabel">Tags</div>
   <div class="tags-row" id="tags-row">
 ${chips}    <input type="text" id="tag-input" class="tag-input" placeholder="Add tag…">
   </div>
 </div>`;
-}
-
-/**
- * Builds the optional file-extension field — **templates only**. The extension
- * is a template-specific frontmatter key (it overrides the fence language when
- * the written file is named, D3), so the input appears for no other type; every
- * other type gets an empty string here and never posts an `extension`.
- *
- * @param model - Form model (its `type` gates the field, `extension` seeds it).
- * @returns The extension form-section HTML, or `''` for non-template types.
- *
- * @example
- * buildExtensionField({ artifactType: 'Template', extension: '.tsx', ... }) // → '<div class="form-section">…'
- * buildExtensionField({ artifactType: 'Snippet', ... })                     // → ''
- */
-function buildExtensionField(model: ArtifactFormModel): string {
-    if (model.artifactType !== 'Template') { return ''; }
-    return buildOptionalTextField('extension', 'File extension', model.extension, 'e.g. .tsx — overrides the fence language');
-}
-
-/**
- * Builds one optional single-line frontmatter input — the shape every
- * type-specific key uses (template `extension`, agent `provider`/`model`/
- * `version`).
- *
- * Exists so those keys cannot drift apart in markup or, worse, in escaping: the
- * seed crosses the webview boundary, so it passes `escHtml` **here**, once, for
- * every caller.
- *
- * @param id          - Input element id; also the posted model key.
- * @param label       - Field label, rendered before the `(optional)` hint.
- * @param value       - Current model value (may be `undefined` for a new artifact).
- * @param placeholder - Placeholder text shown when empty.
- * @returns The form-section HTML for that one input.
- *
- * @example
- * buildOptionalTextField('provider', 'Provider', 'Claude', 'e.g. Claude') // → '<div class="form-section">…'
- */
-function buildOptionalTextField(id: string, label: string, value: string | undefined, placeholder: string): string {
-    const safeVal = escHtml(value ?? '');
-    return `<div class="form-section">
-  <label class="slabel" for="${id}">${label} <span class="muted">(optional)</span></label>
-  <input type="text" id="${id}" class="form-input" value="${safeVal}" placeholder="${placeholder}">
-</div>
-`;
-}
-
-/**
- * Builds the AI-provenance fields — **agents only**. `provider`, `model`, and
- * `version` are agent-specific frontmatter keys, so the inputs appear for no
- * other type; every other type gets an empty string here and never posts them.
- *
- * Rendered through the same `buildOptionalTextField` the template-only
- * `extension` key uses, so the markup and the `escHtml` seeding of these
- * webview-bound values are literally the same code, not a parallel copy.
- *
- * @param model - Form model (its `type` gates the fields, the three keys seed them).
- * @returns The agent form-section HTML, or `''` for non-agent types.
- *
- * @example
- * buildAgentFieldsSection({ artifactType: 'AIAgentsConfig', provider: 'Claude', ... }) // → '<div class="form-section">…'
- * buildAgentFieldsSection({ artifactType: 'Snippet', ... })                   // → ''
- */
-function buildAgentFieldsSection(model: ArtifactFormModel): string {
-    if (model.artifactType !== 'AIAgentsConfig') { return ''; }
-    return buildOptionalTextField('provider', 'Provider', model.provider, 'e.g. Claude')
-        + buildOptionalTextField('model', 'Model', model.model, 'e.g. Opus')
-        + buildOptionalTextField('version', 'Version', model.version, 'e.g. 4.8');
 }
 
 /**
@@ -251,9 +183,9 @@ function buildTagChips(tags: string[]): string {
  * @returns HTML string for the add-block button.
  *
  * @example
- * buildAddBlockButton('Snippet') // → '<button …>+ Add additional snippet</button>'
+ * buildAddBlockButton('snippet') // → '<button …>+ Add additional snippet</button>'
  */
-function buildAddBlockButton(type: ArtifactFormModel['artifactType']): string {
+function buildAddBlockButton(type: ArtifactFormModel['type']): string {
     const label = escHtml(labelForAddBlock(type));
     return `<button id="add-block-btn" class="add-block-btn">${label}</button>`;
 }
@@ -270,9 +202,9 @@ function buildAddBlockButton(type: ArtifactFormModel['artifactType']): string {
  * @returns HTML string for the form footer.
  *
  * @example
- * buildFooter('Snippet')
+ * buildFooter('snippet')
  */
-function buildFooter(type: ArtifactFormModel['artifactType']): string {
+function buildFooter(type: ArtifactFormModel['type']): string {
     const deleteLabel = escHtml(labelForDeleteEntire(type));
     return `<div class="form-footer">
   <button id="save-btn" class="btn btn-primary">Save</button>

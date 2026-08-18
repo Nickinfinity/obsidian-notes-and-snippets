@@ -1,5 +1,5 @@
 ---
-artifactType: Variables
+type: variables
 title: Local Dev
 description: Dev machine settings
 tags: [api, dev]

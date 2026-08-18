@@ -9,7 +9,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (754 passing)
+npm run test           # Compile + lint + run all tests (507 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -29,7 +29,7 @@ Press **F5** in VS Code to launch the Extension Development Host.
 
 ## What This Extension Does
 
-**Obsidian Artifacts: AI Snippets & Tools** bridges an Obsidian vault and VS Code, letting developers insert vault content — snippets, templates, commands, agent configs, AI prompts, and variables — directly into the editor or terminal without leaving VS Code.
+**Obsidian Artifacts: AI Snippets & Tools** bridges an Obsidian vault and VS Code, letting developers insert vault content — snippets, templates, commands, agent configs, and variables — directly into the editor or terminal without leaving VS Code.
 
 - **Settings panel** — pick and validate the vault root, toggle artifact directories.
 - **Artifact picker** — a `vscode.QuickPick` hierarchical navigator with a
@@ -50,34 +50,26 @@ src/
 ├── commands/
 │   ├── openSettings.command.ts       # Registers obsidian-artifacts.settings
 │   ├── insert.command.ts             # One insert command per artifact (loop over ARTIFACTS)
-│   ├── create.command.ts             # Create-artifact flow + editor-selection capture
-│   └── migrate.command.ts            # obsidian-artifacts.migrateFrontmatter — dry-run, then apply
+│   └── create.command.ts             # Create-artifact flow + editor-selection capture
 ├── services/                         # Domain logic. Panels/commands stay thin wiring.
 │   ├── artifact-type-config.service.ts   # THE ARTIFACTS reader — getEntry, getAllTypes, getFormConfig…
 │   ├── config.service.ts                 # THE settings reader — CONFIG_SECTION, getVaultPath(RootUri)
 │   ├── artifact-serializer.service.ts    # THE .md emitter — serializeArtifact
 │   ├── parser.service.ts                 # THE .md reader — parse*, extractVars, resolveVars, VK_TOKEN_RE
-│   ├── flags.service.ts                  # THE %%oa:start%%/%%oa:end%% syntax — extractFlaggedRegions
-│   ├── frontmatter-migration.service.ts  # THE `type:` → `artifactType:` rewrite — planMigration/applyMigration
 │   ├── filename.service.ts               # THE slug — slugify, deriveFileName, validate* guards
-│   ├── template.service(.helpers).ts     # Whole-file types (template + agent) — resolveOutputFileName,
-│   │                                     # validateSingleBlock; helpers = path-injection/ext rules
 │   ├── artifact-patcher.service.ts       # Surgical in-place .md edits
-│   ├── artifact-writer.service.ts        # Atomic writes + isPathWithin path-escape guard
+│   ├── artifact-writer.service.ts        # Atomic writes + isWithinRoot path-escape guard
 │   ├── vault.service.ts · context.service.ts     # Vault validation/detection; context keys
 │   ├── language-map.service.ts · render.service.ts  # mapLanguageId; renderCode(Rows)Html
 │   ├── varset.service.ts                 # Scanner, score, extractSubSets, applyVarSet, buildVarSetModel
-│   ├── multi-index.service.ts            # THE index link syntax + safeRelPath — buildIndexPlan,
-│   │                                     # buildDestCandidates, applyCarryOver (vscode-free)
 │   └── preview-mode.service.ts · temp-document.service.ts
 ├── ui/
 │   ├── panels/
 │   │   ├── artifactPicker.panel.ts   # Re-export shim (back-compat for insert.command.ts)
 │   │   ├── artifactPicker/           # Parts table under Architecture. navigator · codeBlock ·
-│   │   │                             # preview(.render/.clientJs/.helpers/.createFile/.batch) ·
-│   │   │                             # blockEditor · fullEditor · varSetController · varSetDiff ·
-│   │   │                             # multiIndex(.dest) · webviewSnippets · shared
-│   │   │                             # (+ *.helpers.ts siblings)
+│   │   │                             # preview(.render/.clientJs/.helpers) · blockEditor ·
+│   │   │                             # fullEditor · varSetController · varSetDiff ·
+│   │   │                             # webviewSnippets · shared   (+ *.helpers.ts siblings)
 │   │   ├── artifactForm/             # panel(.helpers) · form.html · form.blocks ·
 │   │   │                             # form.clientJs · form.helpers · shared
 │   │   └── settings.panel.ts · varsetPicker.panel.ts · destFolderPicker.panel.ts
@@ -86,14 +78,12 @@ src/
 ├── types/
 │   ├── constants.ts                  # ARTIFACTS · LANG_ALIAS · LANG_FENCE · LANG_EXT
 │   ├── parsed-artifact.types.ts      # ArtifactType union, ParsedArtifactFile, ParsedBlock, ParsedVar
-│   ├── multi-index.types.ts          # IndexStep · IndexPlan · DestCandidate · CarryOver · BatchOutcome
 │   └── artifact.types.ts · artifact-form.types.ts · varset.types.ts · webview-messages.types.ts
 ├── utils/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
-│   ├── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
-│   └── path-containment.ts           # THE containment rule — isPathWithin(root, candidate)
+│   └── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 754 tests. fixtures/ + snapshots/
+test/                                 # 507 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
 └── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
@@ -133,28 +123,8 @@ regression this list exists to prevent; each is held by a named guard test.
 | HTML escaping | `utils/html.ts` — `escHtml` (all five of `&<>"'`) | `webview-snippets.test.ts` — webview `esc` must match it |
 | Webview `esc`/`lbl` | `artifactPicker/webviewSnippets.ts` — `WEBVIEW_ESC_LBL_JS` | `webview-snippets.test.ts` — defined exactly once per bundle |
 | Slugs | `filename.service.ts` — `slugify` | `filename.service.test.ts` |
-| `<VK-xxx>` regex | `parser.service.ts` — `VK_TOKEN_RE` (matches `</VK-xxx>` too) | `utils-html.test.ts` (shared-instance `lastIndex` reuse) · `vk-closing-tag.test.ts` binds the webview `vkWrap` twin |
+| `<VK-xxx>` regex | `parser.service.ts` — `VK_TOKEN_RE` | `utils-html.test.ts` (shared-instance `lastIndex` reuse) |
 | Language tables | `types/constants.ts` — `LANG_ALIAS` / `LANG_FENCE` / `LANG_EXT` | `language-consistency.test.ts` |
-| Context-menu surfaces | `types/constants.ts` — each `ARTIFACTS` entry's `contexts` | `package-menus.test.ts` — pins `package.json` menus to `ARTIFACTS` |
-| Write-a-file vs insert | `types/constants.ts` — `writesFile`, read via `writesWholeFile` | `artifact-type-config.test.ts` — answer must equal the flag, every type |
-| Single-block restriction | `types/constants.ts` — `form.multiBlock`, read via `canMultiBlock` / `forcesSingleBlock` | `artifact-type-config.test.ts` — mirrors the flag, every create-form type |
-| Whole-file naming | `template.service.ts` — `resolveOutputFileName` | `template.service.test.ts` — agent `target:` verbatim vs template D3 chain |
-| Flag syntax (`%%oa:…%%`) | `flags.service.ts` — `extractFlaggedRegions` | `flags.service.test.ts` — no other `src/` file may spell the marker |
-| Index link + path syntax | `multi-index.service.ts` — `safeRelPath` (the sole rejection authority) | `multi-index.service.test.ts` — hostile inputs asserted through **both** callers |
-| Read-side-only frontmatter keys | `parser.service.ts` — `BOOLEAN_FRONTMATTER_KEYS` / `ARRAY_FRONTMATTER_KEYS`, absent from the serializer's `FRONTMATTER_KEY_ORDER` | `frontmatter-keys.test.ts` — the D11 guard: `index` / `paths` must never be emitted |
-| `artifactType` frontmatter key — single key, exact-case PascalCase, no legacy `type:` read (D1) | `parser.service.ts` — `applyFrontmatterField` / `VALID_TYPES`; `artifact-serializer.service.ts` — `FRONTMATTER_KEY_ORDER[0]` | `frontmatter-keys.test.ts` — "artifactType key — T1 migration" suite |
-| Path containment (`isPathWithin`) | `utils/path-containment.ts` — the **one** prefix-with-separator rule, previously spelled out three times | `path-containment.test.ts` — no other `src/` file may spell `endsWith(path.sep)` |
-| Create-form client-JS payload shape | `artifactForm/form.clientJs.ts` — `extractModel()` | `test/form-clientjs-model-shape.test.ts` — binds the webview's posted keys to `ArtifactFormModel`; added after the webview posted `type:` while the extension read `artifactType`, which compiled clean |
-
-**Context menus are driven by `constants.ts`, always.** An artifact's
-`contexts` field is the single source for *where* its command shows (editor /
-terminal / explorer / `all`). Everything runtime derives from it — command
-registration, context keys, `*HasMultiple` counts. `package.json`'s
-`contributes.commands` + `contributes.menus` are the one static mirror (VS Code
-reads them before activation, so they cannot derive at runtime); they must
-match `ARTIFACTS`, and `package-menus.test.ts` fails loudly if they drift — a
-new artifact wired in constants but missing from `package.json` shows **no
-menu entry, no error** without it.
 
 **Never write `ARTIFACTS.find(...)`, a second `escHtml`, or a second slug.**
 Never call `vscode.workspace.getConfiguration('obsidianArtifacts')` outside
@@ -238,16 +208,12 @@ Seven exports: `parseArtifactFile` (sync, reads from disk), `parseFromContent`
 `VK_TOKEN_RE` (carries `/g` — use only with `matchAll`/`replaceAll`, or reset
 `lastIndex`) and `STRING_FRONTMATTER_KEYS`. The parse functions extract:
 frontmatter (`---` fences), the ` ```code ` block, vars (a ` ```vks ` fence for
-`artifactType: Variables`, else an unfenced `vars:` section after the code), and
+`type: variables`, else an unfenced `vars:` section after the code), and
 `blocks` — `## ` headings each followed by a fence. An empty `blocks` array
 signals a single-block file. Tokens are auto-detected by `extractVars`; a
 section whose **first** fence is ` ```vks ` is a pure sub-set, while a code
 fence *followed by* one gets defaults merged via `mergeVarDefaults` (code order
 kept, vks-only keys appended, unmatched detected vars keep `''`).
-
-The body is read one of **two** ways, chosen in a single line of
-`parseFromContent`: `readFlaggedPayload` when the file carries flags (see above),
-`readFencedPayload` — the classic behaviour, unchanged — otherwise.
 **`ARTIFACT_FILE_FORMAT.md` is the authority on all of this** — read it before
 touching the parser, the serializer, or any fixture.
 
@@ -263,16 +229,13 @@ because of a hard VS Code constraint:
 > `contributes.menus` are silently ignored.
 
 IDs follow `obsidian-artifacts.insert.<dir.toLowerCase()>` via
-`artifactCommandId(dir)` and must match `package.json`. A type declaring
-**both** `'editor'` and `'terminal'` in `contexts` (only `AIPrompt` today) also
-registers `artifactTerminalCommandId(dir)` — `<base>.terminal` — a second
-command the terminal menus point at; see **Insert target** below.
+`artifactCommandId(dir)` and must match `package.json`.
 
 **Adding a new artifact type** — two source edits, both in `src/types/`:
 1. Add the entry to `ARTIFACTS` in `src/types/constants.ts`.
 2. Add the literal to the `ArtifactType` union in `parsed-artifact.types.ts`.
    Skipping this is a **compile error**, by design — an unrecognised type must
-   never silently downgrade to `'Snippet'`.
+   never silently downgrade to `'snippet'`.
 
 Everything else derives: command registration, context keys, parser acceptance
 and the type-config accessors. Then, for menu presentation only:
@@ -286,250 +249,17 @@ Code's group separator keeps it last. Each surface shows direct entries when one
 artifact is active there, or an "Obsidian Artifacts" submenu when two or more
 are (`*HasMultiple` context keys, maintained by `context.service.ts`).
 
-**Insert target — the invocation surface, not focus.** `AIPrompt` is the first
-type declaring both `'editor'` and `'terminal'` in `contexts`, so it is the
-first type that has to decide, at insert time, which one to write to.
-"Resolve it from whichever has focus" is not implementable: VS Code exposes no
-terminal-focus predicate — `vscode.window.activeTerminal` is documented as
-"has focus **or most recently had focus**" and never goes back to `undefined`
-on blur, so a focus-based implementation would send every `AIPrompt` to the
-terminal as soon as one had ever been opened. Instead the target is captured
-**statically**, from which command fired: `registerInsertCommands`
-(`insert.command.ts`) registers a base command (routed to `'editor'`) and,
-only for both-context types, a second `artifactTerminalCommandId` command
-(routed to `'terminal'`) that the terminal context menus point at in
-`package.json` — the menu the user actually clicked *is* the answer, always
-correct, no live state to read. `resolveInsertTarget(type, invocationSurface)`
-(`artifactPicker/preview.helpers.ts`) applies the resulting three-row rule:
-`contexts: ['terminal']` (`Command`) always resolves `'terminal'`; both
-contexts declared resolves to whichever surface invoked it; anything else
-(including `Variables`'s `['all']`) always resolves `'editor'`.
-
-**🔒 Terminal send — one paste, not a line of keystrokes.**
-`terminal.sendText(content, false)` suppresses only the *trailing* newline;
-every embedded newline still reaches the shell as if the user pressed Enter
-after that line. That is correct for `Command` — running it is the whole point
-— and wrong for `AIPrompt`, whose payload is multi-line flagged markdown by
-design, comes from the vault (untrusted by this codebase's standing rule), and
-routinely carries a fenced ` ```bash ` block that would otherwise execute
-verbatim.
-
-`wrapForTerminal(type, content)` (`artifactPicker/preview.helpers.ts`) wraps a
-multi-line payload in **bracketed-paste markers** (`ESC[200~` … `ESC[201~`) —
-the same mechanism a real terminal paste uses. The receiving program treats
-everything between them as literal text, so the newlines become part of the
-input instead of submitting it: the prompt lands as one block, the way
-Shift+Enter behaves in a CLI agent, and nothing runs until the user presses
-Enter. No trailing newline is added. Wrapping is skipped for single-line
-content and for any type not declaring **both** contexts, so `Command` is
-byte-identical to before — pinned by a test, because "a `Command` still
-executes line by line" is exactly what a well-meaning refactor would break.
-
-Support cannot be detected from the extension host (a shell with bracketed
-paste disabled would show the markers literally and still act on each line), so
-the confirmation stays as the backstop: `needsTerminalConfirmation(type,
-content)` is `true` only when the target is `'terminal'` **and** the content is
-multi-line **and** the type declares both contexts — so `Command` never
-prompts. A `true` result opens a modal with the line count and a truncated
-preview; Cancel or Escape sends nothing.
-
 ### Vault directory logic (`constants.ts` + `vault.service.ts`)
 
 Each `ARTIFACTS` entry drives directory creation/detection, context keys, and
-command registration. `default: true` (`Snippets`, `AIAgentsConf`, `AIPrompts`)
-are auto-created on first vault selection; `default: false` (`Commands`,
-`Templates`, `Variables`) are detected but never auto-created.
+command registration. `default: true` (`Snippets`, `AgentsConf`) are auto-created
+on first vault selection; `default: false` (`Commands`, `Templates`, `Variables`)
+are detected but never auto-created.
 
-### Templates and AI Agents Config — one flow, two rows in the table
+### No runtime dependencies
 
-`Template` and `AIAgentsConfig` are the two **whole-file** artifact types:
-invoking one from the Explorer writes a new file into the workspace (primary
-button reads **Create File**) instead of inserting at the cursor. Everything
-except *where the filename comes from* is literally the same code — treat any
-new `artifactType === 'Template'` or `artifactType === 'AIAgentsConfig'`
-literal as a bug.
-
-**How they differ** — only in three registry fields and the filename rule:
-
-| | `Template` (`Templates/`) | `AIAgentsConfig` (`AIAgentsConf/`) |
-|---|---|---|
-| `ARTIFACTS` row | `writesFile: true`, `multiBlock: false`, `default: false` | `writesFile: true`, `multiBlock: true`, `default: true` |
-| Type-only frontmatter | `extension:` | `provider:` / `model:` / `version:` |
-| Output filename | D3 precedence: typed → `extension:` → fence language | `target:` **verbatim** (`CLAUDE.md`, `.cursorrules`) — never extension-appended |
-
-**Shared path, file by file:**
-
-- `types/constants.ts` — `writesFile` and `form.multiBlock` are the *only*
-  declarations of this behaviour. Both flags are read through
-  `artifact-type-config.service.ts` (`writesWholeFile`, `forcesSingleBlock`,
-  `canMultiBlock`), never re-derived. `getEntry` stays the sole `ARTIFACTS`
-  traversal — the new accessors go through it too.
-- `services/template.service.ts` — owns both filename rules and the shared D1
-  single-block guard. Callers use **`resolveOutputFileName(artifact)`**, which
-  dispatches to `resolveAgentFileName` / `resolveTemplateFileName`; the panel
-  never branches on type. `validateSingleBlock(parsed, label)` is shared, the
-  human label passed in from `getTypeSingular(type)`.
-- `services/template.service.helpers.ts` — the rules *both* resolvers need:
-  `assertNoPathInjection` (hostile `target:`/`extension:` **throws**, never
-  sanitised), `carriesExtension`, `stripTrailingDots`.
-- `ui/panels/artifactPicker/preview.ts` — `handleInsert` branches once on
-  `writesWholeFile(type)` into the shared `handleCreateFile`;
-  `preview.render.ts` labels the button from the same call, so label and
-  behaviour cannot drift. `navigator.ts` routes 2+ block files with
-  `forcesSingleBlock(type)`, so a malformed multi-block template lands on the
-  single preview where the D1 error surfaces.
-- `parser.service.ts` / `artifact-serializer.service.ts` — the type-only keys are
-  just entries in `STRING_FRONTMATTER_KEYS` + `FRONTMATTER_KEY_ORDER`, all
-  emitted through `safeYamlValue` (single-line, so a newline cannot inject a
-  sibling key). Details: [`ARTIFACT_FILE_FORMAT.md` §5.2](ARTIFACT_FILE_FORMAT.md).
-- `ui/panels/artifactForm/form.html.ts` — `buildExtensionField` and
-  `buildAgentFieldsSection` both render through **`buildOptionalTextField`**, so
-  the markup and its `escHtml` seeding exist once. `form.clientJs.ts` reads all
-  four keys from one `TYPE_FIELD_IDS` list (absent input → `''`).
-
-Adding a third whole-file type is therefore a `constants.ts` row plus one branch
-in `resolveOutputFileName` — nothing else.
-
-### Template indexes — batch scaffolding (`services/multi-index.service.ts`)
-
-A **template index** is an ordinary whole-file artifact carrying `index: true`
-whose body links sibling artifacts; one run scaffolds every linked file. Format,
-link syntaxes, rejection list and carry-over semantics:
-[`ARTIFACT_FILE_FORMAT.md` §8](ARTIFACT_FILE_FORMAT.md) — **authoritative**.
-
-**Additive by construction.** No new artifact type, vault directory, command or
-menu entry, and the two frontmatter keys are read-side only — so
-`package.json`, `types/constants.ts` and `artifact-serializer.service.ts` are
-absent from the feature's diff. That absence *is* the design proof; a change
-that needs to touch them is a different feature.
-
-| File | Owns |
-|---|---|
-| `services/multi-index.service.ts` | **THE** link syntax + `safeRelPath`. Pure, `vscode`-free: `isIndexArtifact`, `extractIndexLinks`, `resolveLinkTarget`, `buildIndexPlan`, `buildDestCandidates`, `applyCarryOver`, `summariseRun` |
-| `types/multi-index.types.ts` | `IndexStep` · `RejectedEntry` · `IndexPlan` · `DestCandidate` · `CarryOver` · `BatchOutcome` · `RunTally` — no `vscode` import (the runner's callback bag needs `Uri`, so it lives beside the runner) |
-| `artifactPicker/multiIndex.ts` | `MultiIndexRunner` — the **only** file doing I/O for the feature |
-| `artifactPicker/multiIndex.dest.ts` | `chooseStepDestination` — QuickPick over the candidates + a `Browse…` row deferring to `pickDestFolder` |
-| `artifactPicker/preview.batch.ts` | `BatchGate` — the one-shot promise the sequencer awaits |
-| `artifactPicker/preview.createFile.ts` | `runCreateFileFlow` — the Create File flow, extracted so one path serves single and batch writes |
-
-**The runner never imports `preview.ts`.** The preview step arrives as the
-`previewStep` callback in its bag, so the runner is testable without an
-extension host — the same callback-bag rule the picker's controllers follow.
-`navigator.ts` composes both, in **one** branch in the accept handler
-(`isIndexArtifact` → `runIndex`), placed between the parse and the multi-block
-check.
-
-**Non-obvious invariants:**
-- `BatchGate.settle()` nulls its resolver **before** calling it, because a
-  write, a cancel and a panel disposal can all fire for one step and only the
-  first may decide the outcome.
-- `runIndex` guards no-workspace and a cancelled destination **before** hiding
-  the QuickPick, or a cancelled palette invocation leaves the picker hidden with
-  no run behind it.
-- Every step runs inside its own try/catch: one bad link degrades to a skip with
-  a warning. Only an explicit `aborted` (the user closed the preview panel)
-  stops the run.
-- An index can never be written verbatim: the picker routes it to a run, and
-  `handleInsert` refuses a Create File click on a merely-hovered index.
-
-**🔒 Security — the one thing to re-check when touching this.** This is the
-extension's first recursive `createDirectory` into the user's *workspace*,
-driven by *vault*-authored text. Two containment assertions guard it and both
-sit immediately before the I/O they protect: the resolved link target must stay
-inside the index's own vault directory (before any read), and the chosen
-destination must stay inside the workspace folder (before `createDirectory`).
-Both assertions route through `isPathWithin` (`utils/path-containment.ts` —
-**THE** containment authority, see the single-sources-of-truth table above),
-via the `isWithinRoot(rootUri, candidateUri)` adapter `multiIndex.ts` imports
-from `destFolderPicker.panel.ts`; it never re-implements the
-prefix-with-separator check itself, and neither do the other two former copies
-of that check (`artifact-writer.service.ts`'s own local adapter, and the
-frontmatter migration's symlink-aware wrapper) — one rule, three thin callers.
-The workspace check also covers the mirrored candidate, which is safe by
-construction and never re-validated. This is a **different, earlier** guard
-than `safeRelPath` (`multi-index.service.ts`):
-`safeRelPath` rejects a hostile link-target or `paths:` *string* before it is
-ever turned into a filesystem path (no `..`, no absolute path, no drive
-letter/URI scheme, …); `isPathWithin` then checks the *resolved* path actually
-lands inside the trusted root. Both **reject and never sanitise**, and neither
-decodes, so an encoded traversal stays an inert literal segment at either
-layer. The IDE analyser does no taint analysis here; a manual trace is the
-only check.
-
-### Flags — plain-markdown payloads (`services/flags.service.ts`)
-
-A vault note is already markdown, so an artifact whose payload *is* markdown —
-an agent config, or an **`AIPrompt`** (`AIPrompts/`, ARTIFACT_FILE_FORMAT.md
-§5.3) — has nothing to wrap it in: a fence is wrong because the payload may
-contain fences. **Flags** mark where the artifact starts and ends, using
-Obsidian's own comment syntax so they are invisible in reading view:
-
-```md
-notes that are not part of the artifact
-
-%%oa:start Dev%%
-Review <VK-repo>.
-
-```bash
-npm test
-```
-%%oa:end%%
-```
-
-- **`flags.service.ts` owns the syntax — nothing else may spell it.**
-  `extractFlaggedRegions(body)` is the whole API; `flags.service.test.ts` fails
-  if any other `src/` file contains the marker, doc comments included (point at
-  the service by name instead).
-- **Type-agnostic by design.** The parser applies it to every file, so
-  `AIPrompt` landed as an `ARTIFACTS` row with **no extraction code** — it
-  reuses the same `extractFlaggedRegions` an agent config already used.
-- **Flags beat fences**, and are purely additive: a file with no flags parses
-  exactly as before. `parser.service.ts` picks between `readFlaggedPayload` and
-  `readFencedPayload` in one line.
-- One region → single-block file; **named regions → `ParsedBlock`s** keyed by the
-  name, reusing the multi-block picker with no new UI.
-- **`***` inside a region is chrome.** Flags are invisible in Obsidian, so
-  authors bracket a region with `***` to see the block — the visual job a fence
-  does for a snippet. Every `***` line between Start and End is dropped;
-  **outside a region, and in flag-less files, it is content**. `---` is never
-  special (ambiguous with frontmatter and setext H2).
-- **Flags are optional for whole-file types.** Precedence is flags → code fence
-  → bare body, and the bare-body fallback fires **only** for `writesFile` types
-  with nothing fenced, so `Snippet`/`Command` behaviour is untouched. `AIPrompt`
-  is **not** a whole-file type, so it never gets that fallback: a prompt with
-  no flags and no fence parses to an empty `code` — accepted behaviour, not a
-  bug (ARTIFACT_FILE_FORMAT.md §5.3).
-- Scanning **skips fenced regions** (a prompt documenting the syntax in a
-  ` ```md ` sample must not terminate itself) and defaults `language` to
-  `markdown`, which is what makes `extForLang` yield `.md` downstream.
-- The whole-file path needed **zero changes**: region content lands in `code`, so
-  `validateSingleBlock` and `resolveOutputFileName` apply unaltered.
-- **Tokens in an unfenced payload need a render-safe spelling.** `<VK-repo>` is
-  a legal HTML tag name, so Obsidian renders it as an unclosed custom element
-  that swallows every block below it (this is what broke the ` ```vks ` fence in
-  the vault examples). `<VK-repo></VK-repo>`, a lone `</VK-repo>`, or a name
-  with `_` all render fine — and all mean the **same variable**
-  ([`ARTIFACT_FILE_FORMAT.md` §4.1](ARTIFACT_FILE_FORMAT.md)).
-
-Rules, edge cases, and the vars interaction: [`ARTIFACT_FILE_FORMAT.md` §7](ARTIFACT_FILE_FORMAT.md).
-
-### One runtime dependency
-
-`highlight.js` — imported by `render.service.ts` for code-preview highlighting,
-and the only entry in `dependencies`. Everything else is the VS Code API and
-Node `fs`/`path`. Keep it that way; the ladder is reuse → stdlib → native
-before any new dep.
-
-*(This section previously claimed "no third-party packages" while `highlight.js`
-was already in `dependencies` — the same stale-invariant failure the Invariants
-section below is about. Corrected rather than left to mislead.)*
-
-**Packaging caveat.** `npx vsce ls` fails on this repo with `npm error
-ELSPROBLEMS`: `vsce` shells out to `npm list --production`, which cannot read
-pnpm's `node_modules` layout and walks `highlight.js`'s own devDependencies.
-Use **`npx vsce ls --no-dependencies`** for the `.vscodeignore` check below.
-A real `vsce package` will need this resolved — either an npm-compatible
-install or `--no-dependencies` with the dependency bundled another way.
+Only the VS Code API and Node `fs`/`path` — no third-party packages. Keep it
+that way; the ladder is reuse → stdlib → native before any new dep.
 
 ---
 
@@ -567,35 +297,13 @@ variable-set flow — one table, not two):
 
 ## Vault File Format & Variable Syntax
 
-> The on-disk `.md` structure (single-block, multi-block, `artifactType: Variables`),
+> The on-disk `.md` structure (single-block, multi-block, `type: variables`),
 > the per-artifact variations table and the `<VK-xxx>` syntax live in
 > [`ARTIFACT_FILE_FORMAT.md`](ARTIFACT_FILE_FORMAT.md) — **authoritative**, and
 > what the parser implements and `parse(serialize(x)) ≅ x` must satisfy. If it
 > and the code disagree, that is a bug to reconcile, not a judgement call — and
 > the reconciliation extends the shared code to match the spec, never the
 > reverse.
-
----
-
-## Writing a Plan
-
-> **Read [`CREATING_A_PLAN.md`](CREATING_A_PLAN.md) before writing any plan**
-> — a multi-phase feature breakdown, a multi-agent dispatch, or anything that
-> lands under `docs/plans/`. It is the **process** authority; a plan under
-> `docs/plans/<feature-slug>/` is one instance of it.
->
-> It owns: where plan files live and why they never merge (`git rm -r docs` is
-> the last commit before the PR), the orchestrator/reviewer/worker topology and
-> their verbatim prompt templates, the mandatory skills, the six-field task
-> spec, the gate command, the ledger format, and the plan's definition of done.
->
-> Two standing rules from it that bind work outside a plan too:
-> **static analysis runs through the *SonarQube for IDE* (SonarLint) VS Code
-> extension** — its `<ide_diagnostics>` arrive on their own after every
-> `Edit`/`Write` and are fixed, not filed; never invoke `sonar-analyze`, the
-> `mcp__sonarqube__*` tools, or the `sonar` CLI (§3.1). And the IDE analyser
-> does **no taint analysis**, so on subprocess, filesystem, and webview
-> surfaces a manual security trace is the only check that exists.
 
 ---
 
@@ -653,7 +361,6 @@ Messages are in the single protocol table above.
 | `.vscode/tasks.json` | `npm watch` is the default build task (runs automatically on F5) |
 | `.vscode-test.mjs` | Test runner looks for compiled tests at `dist/test/**/*.test.js` |
 | [`ARTIFACT_FILE_FORMAT.md`](ARTIFACT_FILE_FORMAT.md) | **Authoritative** artifact `.md` structure spec — parser/serializer contract. Read before touching vault files, fixtures, parser, or any writer. |
-| [`CREATING_A_PLAN.md`](CREATING_A_PLAN.md) | **Authoritative** plan-writing process — agent topology, prompt templates, task spec, gate, ledger. Read before writing any plan or dispatching agents. |
 
 ---
 
@@ -661,10 +368,7 @@ Messages are in the single protocol table above.
 
 - `activationEvents: []` in `package.json` — the extension activates on every window open. Narrow this to specific command events once commands stabilise.
 - Compiled output goes to `dist/` and is **gitignored**. Run `npm run compile` after cloning.
-- `media/` ships in the packaged extension. `src/`, `test/`, and `dist/test/` are excluded via `.vscodeignore` — **except `!src/ui/*.css`**, which must stay a glob. The webviews load stylesheets from source, so a named exception silently ships a CSS-less extension when a sheet is added or renamed, and the suite stays green because tests run from source. Verify with `npx vsce ls --no-dependencies | grep css`, which must list all
-seven sheets. The `--no-dependencies` flag is not optional here — see the
-packaging caveat above; without it `vsce` exits non-zero and `grep` finds
-nothing, which reads exactly like a missing-CSS failure.
+- `media/` ships in the packaged extension. `src/`, `test/`, and `dist/test/` are excluded via `.vscodeignore` — **except `!src/ui/*.css`**, which must stay a glob. The webviews load stylesheets from source, so a named exception silently ships a CSS-less extension when a sheet is added or renamed, and the suite stays green because tests run from source. Verify with `npx vsce ls | grep css`.
 - All imports use explicit `.js` extensions (e.g. `'./helpers.js'`) — required by `Node16` module resolution even for `.ts` source files.
 - Webview `localResourceRoots` is restricted to `extensionUri/src/ui` — all webview assets must live in `src/ui/`.
 

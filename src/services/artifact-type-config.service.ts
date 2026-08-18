@@ -18,8 +18,8 @@ import type { ArtifactType } from '../types/parsed-artifact.types.js';
  * @throws When no entry has a matching `type` field.
  *
  * @example
- * getEntry('Snippet'); // → { type: 'Snippet', dir: 'Snippets', form: { ... }, ... }
- * getEntry('Snippet').dir; // → 'Snippets'
+ * getEntry('snippet'); // → { type: 'snippet', dir: 'Snippets', form: { ... }, ... }
+ * getEntry('snippet').dir; // → 'Snippets'
  */
 export function getEntry(type: ArtifactType): Artifact {
     const entry = ARTIFACTS.find(e => e.type === type);
@@ -32,8 +32,8 @@ export function getEntry(type: ArtifactType): Artifact {
 /**
  * Returns the per-type form configuration for a create-form-enabled type.
  *
- * Throws when the requested type is not create-form-enabled (e.g.
- * `Variables`) — the form UI should never reach this code path
+ * Throws when the requested type is not create-form-enabled (e.g. `agent`,
+ * `template`, `variables`) — the form UI should never reach this code path
  * for an excluded type. Use `getCreateFormTypes()` to drive the type picker
  * so excluded types are never offered.
  *
@@ -42,7 +42,7 @@ export function getEntry(type: ArtifactType): Artifact {
  * @throws When the type is unknown or `createForm !== true`.
  *
  * @example
- * getFormConfig('Command'); // → { language: { mode: 'locked', default: 'bash' }, label: { singular: 'command' }, multiBlock: true }
+ * getFormConfig('command'); // → { language: { mode: 'locked', default: 'bash' }, label: { singular: 'command' }, multiBlock: true }
  */
 export function getFormConfig(type: ArtifactType): ArtifactTypeFormConfig {
     const entry = getEntry(type);
@@ -64,8 +64,8 @@ export function getFormConfig(type: ArtifactType): ArtifactTypeFormConfig {
  * @throws When the type is not create-form-enabled.
  *
  * @example
- * getLanguageMode('Snippet'); // → 'free'
- * getLanguageMode('Command'); // → 'locked'
+ * getLanguageMode('snippet'); // → 'free'
+ * getLanguageMode('command'); // → 'locked'
  */
 export function getLanguageMode(type: ArtifactType): LanguageMode {
     return getFormConfig(type).language.mode;
@@ -84,8 +84,8 @@ export function getLanguageMode(type: ArtifactType): LanguageMode {
  * @throws When the type is not create-form-enabled.
  *
  * @example
- * getDefaultLanguage('Command'); // → 'bash'
- * getDefaultLanguage('Snippet'); // → ''
+ * getDefaultLanguage('command'); // → 'bash'
+ * getDefaultLanguage('snippet'); // → ''
  */
 export function getDefaultLanguage(type: ArtifactType): string {
     return getFormConfig(type).language.default ?? '';
@@ -102,7 +102,7 @@ export function getDefaultLanguage(type: ArtifactType): string {
  * @throws When the type is not create-form-enabled.
  *
  * @example
- * getTypeSingular('Snippet'); // → 'snippet'
+ * getTypeSingular('snippet'); // → 'snippet'
  */
 export function getTypeSingular(type: ArtifactType): string {
     return getFormConfig(type).label.singular;
@@ -119,7 +119,7 @@ export function getTypeSingular(type: ArtifactType): string {
  * @throws When the type is not create-form-enabled.
  *
  * @example
- * canMultiBlock('Snippet'); // → true
+ * canMultiBlock('snippet'); // → true
  */
 export function canMultiBlock(type: ArtifactType): boolean {
     return getFormConfig(type).multiBlock;
@@ -128,7 +128,7 @@ export function canMultiBlock(type: ArtifactType): boolean {
 /**
  * Returns every artifact type declared in `ARTIFACTS`, in declaration order.
  *
- * The parser uses this to decide which frontmatter `artifactType:` values are valid,
+ * The parser uses this to decide which frontmatter `type:` values are valid,
  * so a type added to `ARTIFACTS` is accepted immediately. Before this existed
  * the parser carried its own hardcoded list and silently downgraded any type
  * missing from it to `'snippet'`.
@@ -136,7 +136,7 @@ export function canMultiBlock(type: ArtifactType): boolean {
  * @returns Array of every `ArtifactType` literal.
  *
  * @example
- * getAllTypes(); // → ['Snippet', 'AIAgentsConfig', 'Command', 'Template', 'Variables']
+ * getAllTypes(); // → ['snippet', 'agent', 'command', 'template', 'variables']
  */
 export function getAllTypes(): ArtifactType[] {
     return ARTIFACTS.map(e => e.type);
@@ -152,63 +152,10 @@ export function getAllTypes(): ArtifactType[] {
  * @returns Array of `ArtifactType` literals (order matches `ARTIFACTS` order).
  *
  * @example
- * getCreateFormTypes(); // → ['Snippet', 'AIAgentsConfig', 'Command', 'Template']
+ * getCreateFormTypes(); // → ['snippet', 'command']
  */
 export function getCreateFormTypes(): ArtifactType[] {
     return ARTIFACTS.filter(e => e.createForm === true).map(e => e.type);
-}
-
-/**
- * Reports whether invoking this artifact type writes a whole file into the
- * workspace (the Explorer "Create File" flow) instead of inserting at the cursor.
- *
- * Two types write files today: `Template` (filename from the D3
- * extension-precedence chain) and `AIAgentsConfig` (filename seeded from the
- * `target:` frontmatter key, e.g. `CLAUDE.md`). Every other type inserts at
- * the cursor or sends to the terminal.
- *
- * **Derived from `ARTIFACTS.writesFile`, never a type-literal check** — a
- * hardcoded `type === 'Template' || type === 'AIAgentsConfig'` is the
- * enumeration class that silently drifts when a third file-writing type is added.
- *
- * **Single source for the behaviour** — the preview's primary-button label
- * (`Create File` vs `Insert`) and the insert handler's write-vs-paste branch both
- * call this, so they can never disagree. Guarded by `artifact-type-config.test.ts`.
- *
- * @param type - Canonical `ArtifactType` literal.
- * @returns `true` for `Template` and `AIAgentsConfig`; `false` otherwise.
- * @throws When the type is unknown (via `getEntry`).
- *
- * @example
- * writesWholeFile('Template');       // → true
- * writesWholeFile('AIAgentsConfig'); // → true
- * writesWholeFile('Snippet');        // → false
- */
-export function writesWholeFile(type: ArtifactType): boolean {
-    return getEntry(type).writesFile === true;
-}
-
-/**
- * Reports whether a type is restricted to a single code block (D1).
- *
- * Derived from the same `form.multiBlock` flag `canMultiBlock` reads, but
- * **non-throwing**: types with no create form (`Variables`) answer `false`, so
- * navigation code can ask about any parsed file without a try/catch.
- *
- * The picker uses it to route a malformed 2+ block template to the single
- * preview, where the Create File handler surfaces the D1 error.
- *
- * @param type - Canonical `ArtifactType` literal.
- * @returns `true` only when the type declares `form.multiBlock === false`.
- * @throws When the type is unknown (via `getEntry`) — a *missing form* is not an error.
- *
- * @example
- * forcesSingleBlock('Template');       // → true
- * forcesSingleBlock('AIAgentsConfig'); // → false
- * forcesSingleBlock('Variables');      // → false — no form config, no throw
- */
-export function forcesSingleBlock(type: ArtifactType): boolean {
-    return getEntry(type).form?.multiBlock === false;
 }
 
 /**
@@ -224,7 +171,7 @@ export function forcesSingleBlock(type: ArtifactType): boolean {
  * @returns The owning `ArtifactType`, or `undefined` when no entry claims that directory.
  *
  * @example
- * getTypeForDir('Commands'); // → 'Command'
+ * getTypeForDir('Commands'); // → 'command'
  * getTypeForDir('Whatever'); // → undefined
  */
 export function getTypeForDir(dirName: string): ArtifactType | undefined {

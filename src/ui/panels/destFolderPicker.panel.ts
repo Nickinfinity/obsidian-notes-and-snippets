@@ -1,7 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { validateFolderName } from '../../services/filename.service.js';
-import { isPathWithin } from '../../utils/path-containment.js';
 
 // ── Pure helpers (exported for testing) ──────────────────────────────────────
 
@@ -40,7 +39,8 @@ export function buildBreadcrumb(rootUri: vscode.Uri, currentUri: vscode.Uri): st
  * isWithinRoot(root, Uri.file('/tmp/evil'))      // false
  */
 export function isWithinRoot(rootUri: vscode.Uri, candidateUri: vscode.Uri): boolean {
-    return isPathWithin(rootUri.fsPath, candidateUri.fsPath);
+    const rootPath = rootUri.fsPath.endsWith(path.sep) ? rootUri.fsPath : rootUri.fsPath + path.sep;
+    return candidateUri.fsPath === rootUri.fsPath || candidateUri.fsPath.startsWith(rootPath);
 }
 
 /**

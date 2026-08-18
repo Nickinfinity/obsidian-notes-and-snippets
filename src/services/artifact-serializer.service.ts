@@ -8,14 +8,14 @@ import { getDefaultLanguage, getLanguageMode } from './artifact-type-config.serv
  * Canonical frontmatter key emission order.
  *
  * Keys are emitted in this sequence; keys with empty or undefined values are
- * omitted — except `artifactType`, which is always present. Reserved keys
- * (`env`, `target`) sit at the end so future additions append cleanly.
+ * omitted — except `type`, which is always present. Reserved keys (`env`,
+ * `target`) sit at the end so future additions append cleanly.
  *
  * @example
- * FRONTMATTER_KEY_ORDER // ['artifactType','title','description','language','extension','provider','model','version','tags','env','target']
+ * FRONTMATTER_KEY_ORDER // ['type','title','description','language','tags','env','target']
  */
 export const FRONTMATTER_KEY_ORDER: readonly string[] = [
-    'artifactType', 'title', 'description', 'language', 'extension', 'provider', 'model', 'version', 'tags', 'env', 'target',
+    'type', 'title', 'description', 'language', 'tags', 'env', 'target',
 ];
 
 // ── Public export ─────────────────────────────────────────────────────────────
@@ -33,16 +33,16 @@ export const FRONTMATTER_KEY_ORDER: readonly string[] = [
  * @returns UTF-8 markdown string suitable for writing to disk.
  *
  * @example
- * serializeArtifact({ artifactType: 'Snippet', title: 'Hi', description: '', tags: [],
+ * serializeArtifact({ type: 'snippet', title: 'Hi', description: '', tags: [],
  *   blocks: [{ heading: '', description: '', language: 'javascript', code: 'x', vars: [] }] })
  */
 export function serializeArtifact(model: ArtifactFormModel): string {
     const isMultiBlock = model.blocks.length > 1;
 
-    // `Variables` files carry no code fence at all — the vks fence IS the content
+    // `variables` files carry no code fence at all — the vks fence IS the content
     // (ARTIFACT_FILE_FORMAT.md §3). They are also not create-form-enabled, so the
     // language resolution below would throw on them; this branch must come first.
-    if (model.artifactType === 'Variables') {
+    if (model.type === 'variables') {
         return serializeFrontmatter(model, undefined) + serializeVariablesBody(model, isMultiBlock);
     }
 
@@ -50,7 +50,7 @@ export function serializeArtifact(model: ArtifactFormModel): string {
         return serializeFrontmatter(model, undefined) + serializeMultiBlockBody(model);
     }
 
-    const lang = resolveBlockLanguage(model.artifactType, model.blocks[0]?.language ?? '');
+    const lang = resolveBlockLanguage(model.type, model.blocks[0]?.language ?? '');
     const resolvedLang = lang !== '' ? lang : undefined;
     return serializeFrontmatter(model, resolvedLang) + serializeSingleBlockBody(model.blocks[0] ?? emptyBlock(), lang);
 }
@@ -65,13 +65,13 @@ export function serializeArtifact(model: ArtifactFormModel): string {
  * @returns Frontmatter string ending with `---\n`.
  *
  * @example
- * serializeFrontmatter(model, 'javascript') // '---\nartifactType: Snippet\n...\n---\n'
+ * serializeFrontmatter(model, 'javascript') // '---\ntype: snippet\n...\n---\n'
  */
 function serializeFrontmatter(model: ArtifactFormModel, language: string | undefined): string {
     const lines: string[] = ['---'];
 
-    // artifactType is always emitted
-    lines.push(`artifactType: ${model.artifactType}`);
+    // type is always emitted
+    lines.push(`type: ${model.type}`);
 
     // title / description — single-line enforced
     if (model.title !== '') { lines.push(`title: ${safeYamlValue(model.title)}`); }
@@ -79,26 +79,6 @@ function serializeFrontmatter(model: ArtifactFormModel, language: string | undef
 
     // language — single-block only, omitted for plain text and multi-block
     if (language !== undefined && language !== '') { lines.push(`language: ${language}`); }
-
-    // extension — template-only; emitted verbatim when supplied. Single-line
-    // enforced like title/description; the write-path validators (T2/T3/T5) own
-    // path-injection rejection, not the serializer.
-    if (model.extension !== undefined && model.extension !== '') {
-        lines.push(`extension: ${safeYamlValue(model.extension)}`);
-    }
-
-    // provider / model / version — agent-only; single-line enforced via
-    // safeYamlValue exactly like title/description/extension, so an embedded
-    // newline can never inject a sibling frontmatter key on re-parse.
-    if (model.provider !== undefined && model.provider !== '') {
-        lines.push(`provider: ${safeYamlValue(model.provider)}`);
-    }
-    if (model.model !== undefined && model.model !== '') {
-        lines.push(`model: ${safeYamlValue(model.model)}`);
-    }
-    if (model.version !== undefined && model.version !== '') {
-        lines.push(`version: ${safeYamlValue(model.version)}`);
-    }
 
     // tags — omitted when empty
     if (model.tags.length > 0) {
@@ -134,7 +114,7 @@ function serializeSingleBlockBody(block: ArtifactFormBlock, lang: string): strin
 // ── Variables body ────────────────────────────────────────────────────────────
 
 /**
- * Builds the body for an `artifactType: Variables` file — bare ` ```vks ` fences, no code
+ * Builds the body for a `type: variables` file — bare ` ```vks ` fences, no code
  * fence and no `vars:` label (ARTIFACT_FILE_FORMAT.md §3, §6).
  *
  * Unlike `serializeVks`, vars are emitted **unfiltered**: for a variables file
@@ -192,7 +172,7 @@ function vksFence(vars: ParsedVar[]): string {
  * serializeMultiBlockBody(multiBlockModel)
  */
 function serializeMultiBlockBody(model: ArtifactFormModel): string {
-    return model.blocks.map(b => serializeBlock(b, model.artifactType)).join('');
+    return model.blocks.map(b => serializeBlock(b, model.type)).join('');
 }
 
 /**
@@ -203,7 +183,7 @@ function serializeMultiBlockBody(model: ArtifactFormModel): string {
  * @returns Block string starting with `\n## ` and ending with `\n`.
  *
  * @example
- * serializeBlock(block, 'Snippet')
+ * serializeBlock(block, 'snippet')
  */
 function serializeBlock(block: ArtifactFormBlock, type: ArtifactType): string {
     const lang = resolveBlockLanguage(type, block.language);
@@ -249,9 +229,9 @@ function serializeVks(vars: ParsedVar[]): string {
  * @returns Fence info-string — may be `''` for plain text.
  *
  * @example
- * resolveBlockLanguage('Command', '') // 'bash'
- * resolveBlockLanguage('Snippet', 'javascript') // 'javascript'
- * resolveBlockLanguage('Snippet', '') // ''
+ * resolveBlockLanguage('command', '') // 'bash'
+ * resolveBlockLanguage('snippet', 'javascript') // 'javascript'
+ * resolveBlockLanguage('snippet', '') // ''
  */
 function resolveBlockLanguage(type: ArtifactType, blockLanguage: string): string {
     const mode = getLanguageMode(type);

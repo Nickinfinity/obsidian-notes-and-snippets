@@ -63,7 +63,7 @@ suite('buildFormHtml — snapshots', () => {
 
     test('snippet single-block — language selector enabled', () => {
         const model: ArtifactFormModel = {
-            artifactType: 'Snippet',
+            type:        'snippet',
             title:       'Test Snippet',
             description: 'A test snippet.',
             tags:        ['testing', 'example'],
@@ -90,7 +90,7 @@ suite('buildFormHtml — snapshots', () => {
 
     test('command single-block — language selector disabled showing bash', () => {
         const model: ArtifactFormModel = {
-            artifactType: 'Command',
+            type:        'command',
             title:       'Deploy',
             description: '',
             tags:        [],
@@ -118,7 +118,7 @@ suite('buildFormHtml — snapshots', () => {
 
     test('snippet multi-block (2 blocks) — cards with reorder buttons', () => {
         const model: ArtifactFormModel = {
-            artifactType: 'Snippet',
+            type:        'snippet',
             title:       'Multi Snippet',
             description: 'File-level description.',
             tags:        ['multi'],
@@ -158,93 +158,5 @@ suite('buildFormHtml — snapshots', () => {
         );
 
         snapshot('snippet-multi-block', html);
-    });
-});
-
-// ── T7: template create form ──────────────────────────────────────────────────
-
-/**
- * Templates-as-files (T7): the create form gains an optional, template-only
- * extension field and, being `multiBlock: false`, drops the add-block button.
- */
-suite('buildFormHtml — template', () => {
-
-    function templateModel(extension = ''): ArtifactFormModel {
-        return {
-            artifactType: 'Template',
-            title:       'React Component',
-            description: '',
-            extension,
-            tags:        [],
-            blocks: [
-                { heading: '', description: '', language: 'typescriptreact', code: 'export const C = () => null;', vars: [] },
-            ],
-        };
-    }
-
-    test('renders a template-only extension input, seeded with the model value', () => {
-        const html = buildFormHtml({ ...ARGS, model: templateModel('.tsx') });
-        assert.ok(html.includes('id="extension"'), 'extension input present for a template');
-        assert.ok(html.includes('value=".tsx"'), 'extension input seeded with the model value');
-    });
-
-    test('drops the add-block button (multiBlock: false)', () => {
-        const html = buildFormHtml({ ...ARGS, model: templateModel() });
-        assert.ok(!html.includes('id="add-block-btn"'), 'no add-block button for a single-block-only type');
-    });
-
-    test('a snippet form has no extension input', () => {
-        const snippet: ArtifactFormModel = {
-            artifactType: 'Snippet', title: 'S', description: '', tags: [],
-            blocks: [{ heading: '', description: '', language: 'javascript', code: 'x', vars: [] }],
-        };
-        assert.ok(!buildFormHtml({ ...ARGS, model: snippet }).includes('id="extension"'));
-    });
-});
-
-// ── T3: agent create form ──────────────────────────────────────────────────────
-
-/**
- * AI Agents Config (T3): the create form gains three agent-only, free-text
- * frontmatter inputs — provider / model / version — rendered for no other type.
- */
-suite('buildFormHtml — agent', () => {
-
-    function agentModel(over: Partial<ArtifactFormModel> = {}): ArtifactFormModel {
-        return {
-            artifactType: 'AIAgentsConfig',
-            title:       'Code reviewer',
-            description: '',
-            provider:    'Claude',
-            model:       'Opus',
-            version:     '4.8',
-            tags:        [],
-            blocks: [
-                { heading: '', description: '', language: 'md', code: 'You are a reviewer.', vars: [] },
-            ],
-            ...over,
-        };
-    }
-
-    test('renders agent-only provider/model/version inputs seeded from the model', () => {
-        const html = buildFormHtml({ ...ARGS, model: agentModel() });
-        assert.ok(html.includes('id="provider"'), 'provider input present');
-        assert.ok(html.includes('value="Claude"'), 'provider seeded');
-        assert.ok(html.includes('id="model"'), 'model input present');
-        assert.ok(html.includes('value="Opus"'), 'model seeded');
-        assert.ok(html.includes('id="version"'), 'version input present');
-        assert.ok(html.includes('value="4.8"'), 'version seeded');
-
-        snapshot('agent-single-block', html);
-    });
-
-    test('a snippet form has no provider/model/version inputs', () => {
-        const snippet: ArtifactFormModel = {
-            artifactType: 'Snippet', title: 'S', description: '', tags: [],
-            blocks: [{ heading: '', description: '', language: 'javascript', code: 'x', vars: [] }],
-        };
-        const html = buildFormHtml({ ...ARGS, model: snippet });
-        assert.ok(!html.includes('id="provider"'), 'no provider input for a snippet');
-        assert.ok(!html.includes('id="version"'), 'no version input for a snippet');
     });
 });

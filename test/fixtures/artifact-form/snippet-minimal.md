@@ -1,5 +1,5 @@
 ---
-artifactType: Snippet
+type: snippet
 title: Minimal Snippet
 description: Smallest valid snippet.
 language: javascript

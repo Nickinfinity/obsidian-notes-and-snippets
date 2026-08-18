@@ -92,7 +92,7 @@ suite('validateForSave', () => {
 
     function model(overrides: Partial<ArtifactFormModel> = {}): ArtifactFormModel {
         return {
-            artifactType: 'Snippet',
+            type:        'snippet',
             title:       'Valid Title',
             description: '',
             tags:        [],

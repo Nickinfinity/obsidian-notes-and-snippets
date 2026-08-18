@@ -1,5 +1,5 @@
 ---
-artifactType: Snippet
+type: snippet
 title: Plain Text Snippet
 description: Plain text with no language field and a bare code fence.
 ---

@@ -60,10 +60,8 @@ export const CODE_BLOCK_CLIENT_JS = /* javascript */ String.raw`${WEBVIEW_ESC_LB
     return parts.join('\n');
   }
 
-  // Opening and closing spellings both name one variable — the twin of
-  // VK_TOKEN_RE in parser.service.ts, bound to it by webview-snippets.test.ts.
   function vkWrap(html) {
-    return html.replace(/&lt;(\/?)VK-([A-Za-z]\w*)&gt;/g, '<span class="vk-var">&lt;$1VK-$2&gt;</span>');
+    return html.replace(/&lt;VK-([A-Za-z]\w*)&gt;/g, '<span class="vk-var">&lt;VK-$1&gt;</span>');
   }
   function renderRows(code) {
     const lines = code.split('\n');

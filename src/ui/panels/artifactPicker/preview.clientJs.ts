@@ -14,7 +14,7 @@ import { CODE_BLOCK_CLIENT_JS } from './codeBlock.js';
  * Responsibilities:
  * 1. Include CODE_BLOCK_CLIENT_JS — exposes `window.__codeBlock` + shared
  *    `esc`/`lbl`.
- * 2. Collect `[data-var]` input values; wire Insert/Copy/Edit Block/Edit .md/
+ * 2. Collect `[data-var]` input values; wire Insert/Edit Block/Edit .md/
  *    Cancel buttons and Ctrl/Cmd+Enter to Insert.
  * 3. Apply/Save-as Variable Set buttons; clears a var's `from:` badge on
  *    manual edit.
@@ -41,10 +41,6 @@ export const PREVIEW_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
   document.getElementById('insertBtn').addEventListener('click', function () {
     window.__codeBlock.flushPendingRender();
     vscode.postMessage({ command: 'insert', vars: collectVars(), code: window.__codeBlock.extractCode() });
-  });
-  document.getElementById('copyBtn').addEventListener('click', function () {
-    window.__codeBlock.flushPendingRender();
-    vscode.postMessage({ command: 'copy', vars: collectVars(), code: window.__codeBlock.extractCode() });
   });
   document.getElementById('editBlockBtn').addEventListener('click', function () {
     vscode.postMessage({ command: 'editBlock' });

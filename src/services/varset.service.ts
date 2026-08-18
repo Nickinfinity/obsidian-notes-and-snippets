@@ -5,7 +5,7 @@ import type { ArtifactFormModel } from '../types/artifact-form.types.js';
 import { parseFromContent } from './parser.service.js';
 
 /**
- * Recursively scans a vault `Variables/` directory for `artifactType: Variables` artifact
+ * Recursively scans a vault `Variables/` directory for `type: variables` artifact
  * files, parsing each one and caching the parsed result.
  *
  * Cache is keyed by the absolute fs path of the directory passed to `scan`.
@@ -20,7 +20,7 @@ export class VarSetScanner {
     private cache = new Map<string, ParsedArtifactFile[]>();
 
     /**
-     * Scans the directory and returns parsed `artifactType: Variables` artifact files.
+     * Scans the directory and returns parsed `type: variables` artifact files.
      *
      * @param variablesDirUri - Absolute URI of the directory to scan.
      * @returns Array of parsed files; cached on first call, returned by reference on subsequent calls.
@@ -53,7 +53,7 @@ export class VarSetScanner {
 
     /**
      * Recursive directory walker. Reads every `.md` file, keeps only those whose
-     * frontmatter `artifactType` is `'Variables'`, and pushes them into `out`.
+     * frontmatter `type` is `'variables'`, and pushes them into `out`.
      *
      * @param dirUri  - Current directory being read.
      * @param rootUri - Original root URI passed to `scan` — used to compute relative paths.
@@ -84,12 +84,12 @@ export class VarSetScanner {
             if (type !== vscode.FileType.File) { continue; }
             if (!name.endsWith('.md')) { continue; }
 
-            // Read + parse the .md file; skip when artifactType isn't 'Variables'
+            // Read + parse the .md file; skip when type isn't 'variables'
             try {
                 const bytes   = await vscode.workspace.fs.readFile(childUri);
                 const content = new TextDecoder().decode(bytes);
                 const parsed  = parseFromContent(content, childUri.fsPath, rootUri.fsPath);
-                if (parsed.frontmatter.artifactType === 'Variables') { out.push(parsed); }
+                if (parsed.frontmatter.type === 'variables') { out.push(parsed); }
             } catch {
                 // Unreadable / unparseable file — silently skip.
             }
@@ -242,11 +242,11 @@ export function applyVarSet(
  * @param description - Optional description; omitted from output when empty.
  * @param tags        - Tags copied from the active artifact's frontmatter.
  * @param entries     - Ordered `[name, value]` pairs for the `vks` fence.
- * @returns A single-block `artifactType: Variables` model.
+ * @returns A single-block `type: variables` model.
  *
  * @example
  * buildVarSetModel('Local Dev', '', ['api'], [['VK-host', 'localhost']]);
- * // → { artifactType: 'Variables', title: 'Local Dev', …, blocks: [{ vars: [{ name: 'VK-host', defaultValue: 'localhost' }] }] }
+ * // → { type: 'variables', title: 'Local Dev', …, blocks: [{ vars: [{ name: 'VK-host', defaultValue: 'localhost' }] }] }
  */
 export function buildVarSetModel(
     title:       string,
@@ -255,7 +255,7 @@ export function buildVarSetModel(
     entries:     [string, string][],
 ): ArtifactFormModel {
     return {
-        artifactType: 'Variables',
+        type:        'variables',
         title,
         description,
         tags,

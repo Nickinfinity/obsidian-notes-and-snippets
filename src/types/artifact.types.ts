@@ -63,14 +63,6 @@ export interface Artifact {
 	icon?: string;
 	/** Gate this type into the create-flow type picker. */
 	createForm?: boolean;
-	/**
-	 * Invoking this type writes a whole file into the workspace (Explorer
-	 * "Create File") instead of inserting at the cursor — `template`, `agent`.
-	 *
-	 * Declared here rather than as a type-literal check in a service so the
-	 * write-vs-insert set stays derived from this table (`writesWholeFile`).
-	 */
-	writesFile?: boolean;
 	/** Per-type form behaviour — required when `createForm === true`. */
 	form?: ArtifactTypeFormConfig;
 }

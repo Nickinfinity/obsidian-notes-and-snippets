@@ -1,21 +1,16 @@
 import * as vscode from 'vscode';
-import { parseFromContent, resolveVars } from '../../../services/parser.service.js';
+import { parseFromContent } from '../../../services/parser.service.js';
 import { renderCodeHtml, renderCodeRowsHtml } from '../../../services/render.service.js';
-import { writesWholeFile } from '../../../services/artifact-type-config.service.js';
 import { patchFrontmatterField, patchVarDefaults, type BlockRef } from '../../../services/artifact-patcher.service.js';
 import { PreviewModeController, type SectionKey } from '../../../services/preview-mode.service.js';
 import { getNonce } from '../../../utils/helpers.js';
 import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js';
 import { out } from './shared.js';
-import { POPUP_VIEW_TYPE, performInsert, type InvocationSurface } from './preview.helpers.js';
+import { POPUP_VIEW_TYPE, performInsert } from './preview.helpers.js';
 import { renderPreviewHtml, renderMultiBlockPreviewHtml, renderPopupEmptyHtml, mergeVarsWithDefaults } from './preview.render.js';
 import { FullEditController } from './fullEditor.js';
 import { BlockEditController } from './blockEditor.js';
 import { VarSetController } from './varSetController.js';
-import { runCreateFileFlow, toBatchOutcome } from './preview.createFile.js';
-import { BatchGate } from './preview.batch.js';
-import { isIndexArtifact } from '../../../services/multi-index.service.js';
-import type { BatchOutcome } from '../../../types/multi-index.types.js';
 
 // Re-export the adapter so the navigator does not need to import preview.helpers directly.
 export { blockAsArtifact } from './preview.helpers.js';
@@ -33,19 +28,17 @@ export interface PreviewCallbacks {
     closePicker: () => void;
     /** Extension storage dir for block-edit temp files (`context.storageUri ?? globalStorageUri`). */
     storageUri: vscode.Uri;
-    /** Explorer URI a Template was invoked on (D2); `undefined` for non-template flows. */
-    destUri?: vscode.Uri;
-    /** Which context-menu surface the insert command was invoked from (T3); threaded to `performInsert`. */
-    invocationSurface: InvocationSurface;
 }
 
 /**
  * Owns the popup `WebviewPanel` lifecycle, all preview HTML rendering, the
- * webview ↔ extension message protocol, and the embedded sub-controllers.
+ * webview ↔ extension message protocol, and the embedded `FullEditController`.
+ *
  * Created lazily by the navigator once the user starts hovering an item.
  *
  * @example
- * new PreviewPanelController({ extensionUri, rootFs, targetEditor, setCache, onDispose, closePicker }).showPreview(artifact);
+ * const ctrl = new PreviewPanelController({ extensionUri, rootFs, targetEditor, setCache, onDispose, closePicker });
+ * await ctrl.showPreview(artifact);
  */
 export class PreviewPanelController {
     private panel: vscode.WebviewPanel | undefined;
@@ -57,7 +50,6 @@ export class PreviewPanelController {
     private readonly fullEdit:  FullEditController;
     private readonly blockEdit: BlockEditController;
     private readonly varSet:    VarSetController;
-    private readonly batch = new BatchGate();  // one-shot per-step gate a MultiIndexRunner arms (T4)
     /** Which code fence the Edit Block action targets; updated on each `showPreview`. */
     private currentBlockRef: BlockRef = { kind: 'single' };
 
@@ -94,8 +86,10 @@ export class PreviewPanelController {
 
     /**
      * Brings the popup tab into view in its column.
-     * @param preserveFocus - `true` keeps focus on the QuickPick (during navigation);
-     *                        `false` focuses the panel once the picker hides.
+     *
+     * @param preserveFocus - When `true`, keeps focus on the QuickPick (used during
+     *                        navigation).  Pass `false` after the picker hides to
+     *                        focus the panel for interaction.
      */
     reveal(preserveFocus: boolean): void {
         this.panel?.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Beside, preserveFocus);
@@ -104,23 +98,15 @@ export class PreviewPanelController {
     /** Disposes the popup panel — the dispose listener fires `cb.onDispose`. */
     dispose(): void { this.panel?.dispose(); }
 
-    /** `MultiIndexRunner`'s per-step hook: arms the batch gate, shows the preview,
-     *  reveals the panel, and returns the gate's promise (settled by `handleCreateFile` /
-     *  `cancel` / `onDidDispose`). */
-    previewOnce(artifact: ParsedArtifactFile, destDir: vscode.Uri): Promise<BatchOutcome> {
-        const outcome = this.batch.arm(destDir);
-        this.showPreview(artifact);
-        this.reveal(false);
-        return outcome;
-    }
-
     // ── Renderers ─────────────────────────────────────────────────────────────
 
     /**
      * Creates (once per session) or updates the popup in interactive preview mode.
+     *
      * @param artifact - Single-block artifact (or block-adapted artifact) to display.
-     * @param blockRef - Source `.md` fence the Edit Block action targets; defaults
-     *                   to `{ kind: 'single' }`.
+     * @param blockRef - Which source `.md` code fence the Edit Block action targets.
+     *                   Defaults to `{ kind: 'single' }`; pass `{ kind: 'multi', heading }`
+     *                   when previewing a block of a multi-block file.
      */
     showPreview(artifact: ParsedArtifactFile, blockRef?: BlockRef): void {
         this.fullEdit.teardown();
@@ -141,6 +127,7 @@ export class PreviewPanelController {
 
     /**
      * Creates (once per session) or updates the popup with a stacked multi-block preview.
+     *
      * @param artifact - Multi-block artifact to preview.
      */
     showMultiBlockPreview(artifact: ParsedArtifactFile): void {
@@ -186,7 +173,6 @@ export class PreviewPanelController {
                 this.panel           = undefined;
                 this.modeController  = undefined;
                 this.currentArtifact = undefined;
-                this.batch.settle({ kind: 'aborted' });  // no-op unless still armed (D5)
                 this.cb.onDispose();
             });
             // Order matters — base.css carries the global reset every panel needs.
@@ -225,17 +211,13 @@ export class PreviewPanelController {
         else if (cmd === 'editBlock')     { await this.handleEditBlock(); }
         else if (cmd === 'saveSection')   { await this.handleSaveSection(msg); }
         else if (cmd === 'insert')        { this.handleInsert(msg); }
-        else if (cmd === 'copy')          { this.handleCopy(msg); }
-        else if (cmd === 'cancel')        { this.cancel(); }
+        else if (cmd === 'cancel')        { this.dispose(); }
         else if (cmd === 'pickVarSet')    { await this.varSet.handlePickVarSet(msg); }
         else if (cmd === 'confirmApply')  { this.varSet.handleConfirmApply(); }
         else if (cmd === 'cancelApply')   { this.varSet.handleCancelApply(); }
         else if (cmd === 'saveAsVarSet')  { await this.varSet.handleSaveAsVarSet(msg); }
         else if (cmd === 'clearVarSource'){ this.modeController?.clearVarSource(msg.name as string); }
     }
-
-    /** Cancel: settles the batch gate `skipped` when armed (D5); else disposes as before. */
-    private cancel(): void { if (this.batch.isArmed) { this.batch.settle({ kind: 'skipped' }); return; } this.dispose(); }
 
     private handleFullEdit(): void {
         const artifact = this.currentArtifact;
@@ -245,8 +227,9 @@ export class PreviewPanelController {
     }
 
     /**
-     * Opens just the previewed code block as a temp file in extension storage;
-     * saving it patches the matching fence in the source `.md` (`fileUpdated`).
+     * Opens just the previewed code block as a temp file in extension storage.
+     * Saving that file patches the matching code fence in the source `.md` and
+     * refreshes the preview via a `fileUpdated` round-trip.
      */
     private async handleEditBlock(): Promise<void> {
         const artifact = this.currentArtifact;
@@ -289,22 +272,10 @@ export class PreviewPanelController {
     private handleInsert(msg: Record<string, unknown>): void {
         const artifact = this.currentArtifact;
         if (!artifact) { return; }
-
-        // Index guard (F7): a hovered index still renders Create File — only an armed run may write it.
-        if (isIndexArtifact(artifact.frontmatter) && !this.batch.isArmed) {
-            void vscode.window.showInformationMessage('This is a template index — press Enter in the picker to run it.'); return;
-        }
-        // Templates/agent configs write a whole file instead of inserting at the
-        // cursor; `writesWholeFile` is the single source shared with the label.
-        if (writesWholeFile(artifact.frontmatter.artifactType)) {
-            void this.handleCreateFile(msg, artifact);
-            return;
-        }
-
         const code         = this.resolveInsertCode(msg, artifact);
         const resolvedVars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
 
-        void performInsert(this.cb.targetEditor, { ...artifact, code }, resolvedVars, this.cb.invocationSurface);
+        performInsert(this.cb.targetEditor, { ...artifact, code }, resolvedVars);
         this.fullEdit.teardown();
         void this.blockEdit.teardown();
         this.dispose();
@@ -312,41 +283,10 @@ export class PreviewPanelController {
     }
 
     /**
-     * Copies the resolved code to the clipboard — every artifact type, no
-     * `writesWholeFile` / `isIndexArtifact` branching (T2 — the button is
-     * universal by design). Resolution mirrors `handleInsert`: the same
-     * `resolveInsertCode` + `mergeVarsWithDefaults` → `resolveVars` chain,
-     * so Copy and Insert never disagree on what "this artifact" means.
-     * @param msg - `{ code, vars }` posted by the webview's Copy button.
-     * @example this.handleCopy({ code: 'ping <VK-host>', vars: { 'VK-host': 'db' } });
-     */
-    private handleCopy(msg: Record<string, unknown>): void {
-        const artifact = this.currentArtifact;
-        if (!artifact) { return; }
-        const code         = this.resolveInsertCode(msg, artifact);
-        const resolvedVars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
-        // Chained, not fire-and-forget: a remote/SSH host can reject the write, and the
-        // toast must not claim success when it did (reviewer finding 1).
-        void vscode.env.clipboard.writeText(resolveVars(code, resolvedVars))
-            .then(() => vscode.window.showInformationMessage('Obsidian Artifacts: Copied to clipboard.'));
-    }
-
-    /** Routes to the Create File flow (D12); armed (batch step) pins `destDir`, skips
-     *  the tab-open (D7), and settles the gate instead of closing the panel/picker. */
-    private async handleCreateFile(msg: Record<string, unknown>, artifact: ParsedArtifactFile): Promise<void> {
-        const code = this.resolveInsertCode(msg, artifact);
-        const vars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
-        const result = await runCreateFileFlow({
-            artifact, code, vars, destDir: this.batch.destDir,
-            destUri: this.cb.destUri, openAfterWrite: !this.batch.isArmed,
-        });
-        if (this.batch.isArmed) { this.batch.settle(toBatchOutcome(result, vars)); return; }
-        if (result.kind === 'written') { this.dispose(); this.cb.closePicker(); }
-    }
-
-    /**
-     * Canonical code source for `Insert`: fullEdit mode → live `.md` document;
-     * else `msg.code` from the webview; fallback → `artifact.code`.
+     * Picks the canonical code source for `Insert`:
+     *   - fullEdit mode → live `.md` document content (may have unsaved external edits)
+     *   - else          → `msg.code` from the contenteditable webview surface
+     *   - fallback      → `artifact.code` (last parsed snapshot)
      */
     private resolveInsertCode(msg: Record<string, unknown>, artifact: ParsedArtifactFile): string {
         const mode = this.modeController?.mode ?? 'preview';

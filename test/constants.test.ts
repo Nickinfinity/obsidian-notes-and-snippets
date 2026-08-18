@@ -29,117 +29,70 @@ suite('ARTIFACTS per-type form config', () => {
         }
     });
 
-    test('snippet entry exists with type Snippet', () => {
-        assert.ok(findByType('Snippet'), 'no ARTIFACTS entry with type === "Snippet"');
+    test('snippet entry exists with type snippet', () => {
+        assert.ok(findByType('snippet'), 'no ARTIFACTS entry with type === "snippet"');
     });
 
-    test('command entry exists with type Command', () => {
-        assert.ok(findByType('Command'), 'no ARTIFACTS entry with type === "Command"');
+    test('command entry exists with type command', () => {
+        assert.ok(findByType('command'), 'no ARTIFACTS entry with type === "command"');
     });
 
     // ── snippet form config ──────────────────────────────────────────────────
 
     test('snippet: createForm === true', () => {
-        assert.strictEqual(findByType('Snippet')!.createForm, true);
+        assert.strictEqual(findByType('snippet')!.createForm, true);
     });
 
     test('snippet: form.language.mode === free', () => {
-        assert.strictEqual(findByType('Snippet')!.form!.language.mode, 'free');
+        assert.strictEqual(findByType('snippet')!.form!.language.mode, 'free');
     });
 
     test('snippet: form.language.default === "" (plain text)', () => {
-        assert.strictEqual(findByType('Snippet')!.form!.language.default, '');
+        assert.strictEqual(findByType('snippet')!.form!.language.default, '');
     });
 
     test('snippet: form.label.singular === "snippet"', () => {
-        assert.strictEqual(findByType('Snippet')!.form!.label.singular, 'snippet');
+        assert.strictEqual(findByType('snippet')!.form!.label.singular, 'snippet');
     });
 
     test('snippet: form.multiBlock === true', () => {
-        assert.strictEqual(findByType('Snippet')!.form!.multiBlock, true);
+        assert.strictEqual(findByType('snippet')!.form!.multiBlock, true);
     });
 
     // ── command form config ──────────────────────────────────────────────────
 
     test('command: createForm === true', () => {
-        assert.strictEqual(findByType('Command')!.createForm, true);
+        assert.strictEqual(findByType('command')!.createForm, true);
     });
 
     test('command: form.language.mode === locked', () => {
-        assert.strictEqual(findByType('Command')!.form!.language.mode, 'locked');
+        assert.strictEqual(findByType('command')!.form!.language.mode, 'locked');
     });
 
     test('command: form.language.default === "bash"', () => {
-        assert.strictEqual(findByType('Command')!.form!.language.default, 'bash');
+        assert.strictEqual(findByType('command')!.form!.language.default, 'bash');
     });
 
     test('command: form.label.singular === "command"', () => {
-        assert.strictEqual(findByType('Command')!.form!.label.singular, 'command');
+        assert.strictEqual(findByType('command')!.form!.label.singular, 'command');
     });
 
     test('command: form.multiBlock === true', () => {
-        assert.strictEqual(findByType('Command')!.form!.multiBlock, true);
-    });
-
-    // ── template form config (Templates-as-files) ────────────────────────────
-
-    test('template: contexts === ["explorer"] (leaves the editor menu, D4)', () => {
-        assert.deepStrictEqual(findByType('Template')!.contexts, ['explorer']);
-    });
-
-    test('template: createForm === true', () => {
-        assert.strictEqual(findByType('Template')!.createForm, true);
-    });
-
-    test('template: form.language.mode === free', () => {
-        assert.strictEqual(findByType('Template')!.form!.language.mode, 'free');
-    });
-
-    test('template: form.multiBlock === false (single-block only, D1)', () => {
-        assert.strictEqual(findByType('Template')!.form!.multiBlock, false);
-    });
-
-    // ── agent form config (create-form + provider/model/version) ─────────────
-
-    test('agent: createForm === true', () => {
-        assert.strictEqual(findByType('AIAgentsConfig')!.createForm, true);
-    });
-
-    test('agent: form.language.mode === free', () => {
-        assert.strictEqual(findByType('AIAgentsConfig')!.form!.language.mode, 'free');
-    });
-
-    test('agent: form.multiBlock === true (D4)', () => {
-        assert.strictEqual(findByType('AIAgentsConfig')!.form!.multiBlock, true);
-    });
-
-    // ── whole-file types (template + agent share one flow) ───────────────────
-
-    test('template: writesFile === true (Explorer Create File flow)', () => {
-        assert.strictEqual(findByType('Template')!.writesFile, true);
-    });
-
-    test('agent: writesFile === true — same flow as template, target:-named', () => {
-        assert.strictEqual(findByType('AIAgentsConfig')!.writesFile, true);
-    });
-
-    /**
-     * The registry, not a service literal, decides who writes a file. Dropping
-     * `writesFile` from a row must flip the behaviour (guarded downstream by
-     * `artifact-type-config.test.ts`), and a cursor-insert type must never
-     * acquire it by accident.
-     */
-    test('cursor-insert types declare no writesFile flag', () => {
-        for (const type of ['Snippet', 'Command', 'Variables'] as const) {
-            assert.notStrictEqual(findByType(type)!.writesFile, true,
-                `${type} must not declare writesFile — it inserts, it does not write a file`);
-        }
+        assert.strictEqual(findByType('command')!.form!.multiBlock, true);
     });
 
     // ── excluded types: createForm !== true ──────────────────────────────────
 
+    test('template: createForm !== true (deferred)', () => {
+        assert.notStrictEqual(findByType('template')!.createForm, true);
+    });
+
+    test('agent: createForm !== true (different authoring flow)', () => {
+        assert.notStrictEqual(findByType('agent')!.createForm, true);
+    });
+
     test('variables: createForm !== true (own save-as flow)', () => {
-        assert.notStrictEqual(findByType('Variables')!.createForm, true);
+        assert.notStrictEqual(findByType('variables')!.createForm, true);
     });
 
     // ── invariants ───────────────────────────────────────────────────────────
@@ -175,8 +128,8 @@ suite('ARTIFACTS per-type form config', () => {
 
 /**
  * `parser.service.ts` used to carry its own hardcoded set of the five valid
- * `artifactType:` values. A type added to ARTIFACTS but missing from that list
- * was *silently* downgraded to 'Snippet' on parse — no error, no warning, just
+ * `type:` values. A type added to ARTIFACTS but missing from that list was
+ * *silently* downgraded to 'snippet' on parse — no error, no warning, just
  * wrong data. VALID_TYPES is now derived, and this suite is what keeps the two
  * bound: it fails loudly if any future change re-hardcodes the list.
  */
@@ -184,32 +137,19 @@ suite('ARTIFACTS ↔ parser type agreement', () => {
 
     /**
      * @example
-     * parseFromContent('---\nartifactType: Variables\n---\n').frontmatter.artifactType === 'Variables'
+     * parseFromContent('---\ntype: variables\n---\n').frontmatter.type === 'variables'
      */
     test('the parser accepts every type declared in ARTIFACTS', () => {
         for (const entry of ARTIFACTS) {
-            const parsed = parseFromContent(`---\nartifactType: ${entry.type}\n---\n`, '/v/x.md', '/v');
-            assert.strictEqual(parsed.frontmatter.artifactType, entry.type,
-                `parser rejected declared type '${entry.type}' and fell back to '${parsed.frontmatter.artifactType}'`);
+            const parsed = parseFromContent(`---\ntype: ${entry.type}\n---\n`, '/v/x.md', '/v');
+            assert.strictEqual(parsed.frontmatter.type, entry.type,
+                `parser rejected declared type '${entry.type}' and fell back to '${parsed.frontmatter.type}'`);
         }
     });
 
-    test('an undeclared type still falls back to the directory-derived default', () => {
-        const parsed = parseFromContent('---\nartifactType: not-a-real-type\n---\n', '/v/x.md', '/v');
-        assert.strictEqual(parsed.frontmatter.artifactType, 'Snippet');
-    });
-
-    test('a legacy `type:` key is ignored entirely — never read as artifactType', () => {
-        const parsed = parseFromContent('---\ntype: Command\n---\n', '/v/x.md', '/v');
-        assert.strictEqual(parsed.frontmatter.artifactType, 'Snippet');
-    });
-
-    test('a value differing only in case does not match — no case-insensitive fallback', () => {
-        // '/vault/Commands' resolves a different directory-derived default ('Command')
-        // than the hardcoded 'Snippet' fallback, so a case-insensitive bug (wrongly
-        // accepting 'snippet' as 'Snippet') is distinguishable from correct behaviour.
-        const parsed = parseFromContent('---\nartifactType: snippet\n---\n', '/vault/Commands/x.md', '/vault/Commands');
-        assert.strictEqual(parsed.frontmatter.artifactType, 'Command');
+    test('an undeclared type still falls back to snippet', () => {
+        const parsed = parseFromContent('---\ntype: not-a-real-type\n---\n', '/v/x.md', '/v');
+        assert.strictEqual(parsed.frontmatter.type, 'snippet');
     });
 
     test('getAllTypes covers ARTIFACTS exactly — no extras, no omissions', () => {

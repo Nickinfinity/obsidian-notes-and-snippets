@@ -1,5 +1,5 @@
 ---
-artifactType: Snippet
+type: snippet
 title: Quoted Default Snippet
 description: Tests verbatim default preservation with quoted strings.
 language: javascript

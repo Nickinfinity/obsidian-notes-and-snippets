@@ -24,7 +24,7 @@ const FORM_VIEW_TYPE = 'obsidian-artifacts.artifactForm';
  * Options for opening the Artifact Form panel.
  *
  * @example
- * openArtifactFormPanel(context, { mode: 'create', type: 'Snippet' })
+ * openArtifactFormPanel(context, { mode: 'create', type: 'snippet' })
  */
 export interface OpenFormOpts {
     /** `'create'` or `'edit'` — only create implemented; edit seam marked. */
@@ -51,7 +51,7 @@ let currentController: ArtifactFormController | undefined;
  * @param opts    - See `OpenFormOpts`.
  *
  * @example
- * openArtifactFormPanel(context, { mode: 'create', type: 'Snippet' });
+ * openArtifactFormPanel(context, { mode: 'create', type: 'snippet' });
  */
 export function openArtifactFormPanel(
     context: vscode.ExtensionContext,
@@ -253,7 +253,7 @@ class ArtifactFormController {
         // unrecognised type; convert that into the user-facing save error.
         let baseDirName: string;
         try {
-            baseDirName = getEntry(model.artifactType).dir;
+            baseDirName = getEntry(model.type).dir;
         } catch {
             this.post({ command: 'saveResult', ok: false, error: 'Unknown artifact type.' });
             return;
@@ -282,7 +282,7 @@ class ArtifactFormController {
         // Step 3: serialize + write (with collision loop)
         const pruned  = { ...model, blocks: pruneVarsForSave(model.blocks) };
         const content = serializeArtifact(pruned);
-        await this.writeWithCollision(vaultRoot, model.artifactType, chosenDir, fileName, content);
+        await this.writeWithCollision(vaultRoot, model.type, chosenDir, fileName, content);
     }
 
     private async writeWithCollision(
