@@ -58,7 +58,7 @@ export function renderPreviewHtml(
 ): string {
     const e = escHtml;
     const title    = e(a.frontmatter.title || a.fileName);
-    const type     = e(a.frontmatter.type);
+    const type     = e(a.frontmatter.artifactType);
     const lang     = a.frontmatter.language ? e(a.frontmatter.language) : '';
     const desc     = a.frontmatter.description ? e(a.frontmatter.description) : '';
     const env      = a.frontmatter.env ? `<span class="pill">env: ${e(a.frontmatter.env)}</span>` : '';
@@ -69,7 +69,7 @@ export function renderPreviewHtml(
     // type inserts at the cursor (Insert). `writesWholeFile` is the ONLY per-type
     // rendering difference and the single source shared with the insert handler —
     // the byte-exact golden for a snippet is the tripwire that it did not leak wider.
-    const primaryLabel = writesWholeFile(a.frontmatter.type) ? 'Create File' : 'Insert';
+    const primaryLabel = writesWholeFile(a.frontmatter.artifactType) ? 'Create File' : 'Insert';
 
     const inputsHtml = a.vars.length > 0
         ? a.vars.map(v => {
@@ -113,6 +113,7 @@ ${styleLinkTags(cssUri)}
   </div>
   <div class="actions">
     <button class="btn btn-insert"    id="insertBtn">${primaryLabel}</button>
+    <button class="btn btn-secondary" id="copyBtn">Copy</button>
     <button class="btn btn-secondary" id="editBlockBtn">Edit Block</button>
     <button class="btn btn-secondary" id="editBtn">Edit .md</button>
     <button class="btn btn-cancel"    id="cancelBtn">Cancel</button>
@@ -148,7 +149,7 @@ export function renderMultiBlockPreviewHtml(
 ): string {
     const e = escHtml;
     const title    = e(a.frontmatter.title || a.fileName);
-    const type     = e(a.frontmatter.type);
+    const type     = e(a.frontmatter.artifactType);
     const lang     = a.frontmatter.language ? e(a.frontmatter.language) : '';
     const tagsHtml = (a.frontmatter.tags ?? []).map(t => `<span class="tag">${e(t)}</span>`).join('');
 

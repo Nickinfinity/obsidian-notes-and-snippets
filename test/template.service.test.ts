@@ -102,7 +102,7 @@ function parsedWith(blocks: ParsedBlock[]): ParsedArtifactFile {
         filePath: '/v/Templates/x.md',
         fileName: 'x',
         relativePath: 'x.md',
-        frontmatter: { type: 'template' },
+        frontmatter: { artifactType: 'Template' },
         code: 'x',
         vars: [],
         blocks,
@@ -147,32 +147,32 @@ suite('resolveOutputFileName', () => {
         // The regression this guards: dispatching an agent through the template
         // chain turns '.cursorrules' into '.cursorrules.md'.
         assert.strictEqual(
-            resolveOutputFileName(artifactWith({ type: 'agent', target: '.cursorrules', language: 'markdown' })),
+            resolveOutputFileName(artifactWith({ artifactType: 'AIAgentsConfig', target: '.cursorrules', language: 'markdown' })),
             '.cursorrules',
         );
     });
 
     test('a template routes to the D3 extension chain', () => {
         assert.strictEqual(
-            resolveOutputFileName(artifactWith({ type: 'template', extension: 'tsx' }, 'button')),
+            resolveOutputFileName(artifactWith({ artifactType: 'Template', extension: 'tsx' }, 'button')),
             'button.tsx',
         );
     });
 
     test('both types fall back to the title before the vault file name', () => {
         assert.strictEqual(
-            resolveOutputFileName(artifactWith({ type: 'agent', title: 'Claude reviewer' }, 'ignored')),
+            resolveOutputFileName(artifactWith({ artifactType: 'AIAgentsConfig', title: 'Claude reviewer' }, 'ignored')),
             'Claude reviewer.md',
         );
         assert.strictEqual(
-            resolveOutputFileName(artifactWith({ type: 'template', title: 'Button', language: 'tsx' }, 'ignored')),
+            resolveOutputFileName(artifactWith({ artifactType: 'Template', title: 'Button', language: 'tsx' }, 'ignored')),
             'Button.tsx',
         );
     });
 
     test('a hostile frontmatter value throws through the dispatcher too', () => {
-        assert.throws(() => resolveOutputFileName(artifactWith({ type: 'agent', target: '../../etc/passwd' })), /path separator/);
-        assert.throws(() => resolveOutputFileName(artifactWith({ type: 'template', extension: '../x' })), /path separator/);
+        assert.throws(() => resolveOutputFileName(artifactWith({ artifactType: 'AIAgentsConfig', target: '../../etc/passwd' })), /path separator/);
+        assert.throws(() => resolveOutputFileName(artifactWith({ artifactType: 'Template', extension: '../x' })), /path separator/);
     });
 });
 

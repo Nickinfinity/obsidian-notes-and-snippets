@@ -8,12 +8,12 @@ import type { ArtifactFormModel } from '../src/types/artifact-form.types.js';
  * `parse(serialize(x))` round-trip in D3 order, and empty fields must be
  * omitted (not emitted blank) rather than round-tripping to `''`.
  */
-const ROOT = '/vault/AgentsConf';
-const FILE = '/vault/AgentsConf/reviewer.md';
+const ROOT = '/vault/AIAgentsConf';
+const FILE = '/vault/AIAgentsConf/reviewer.md';
 
 function agentModel(over: Partial<ArtifactFormModel> = {}): ArtifactFormModel {
     return {
-        type:        'agent',
+        artifactType: 'AIAgentsConfig',
         title:       'Code reviewer',
         description: '',
         provider:    'Claude',

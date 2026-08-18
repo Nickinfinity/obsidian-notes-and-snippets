@@ -47,7 +47,7 @@ function rmTempVarsDir(dir: string): void {
 }
 
 /**
- * Writes a `type: variables` artifact `.md` file with a single `vars` fence.
+ * Writes a `artifactType: Variables` artifact `.md` file with a single `vars` fence.
  *
  * @param filePath - Absolute target path on disk.
  * @param env      - Frontmatter `env` value (e.g. `dev`, `prod`).
@@ -60,7 +60,7 @@ function rmTempVarsDir(dir: string): void {
 function writeVarFile(filePath: string, env: string, vars: Record<string, string>): void {
     const lines = [
         '---',
-        'type: variables',
+        'artifactType: Variables',
         `env: ${env}`,
         '---',
         '',
@@ -74,7 +74,7 @@ function writeVarFile(filePath: string, env: string, vars: Record<string, string
 }
 
 /**
- * Writes a multi-block `type: variables` artifact file using `## Heading` blocks.
+ * Writes a multi-block `artifactType: Variables` artifact file using `## Heading` blocks.
  *
  * @param filePath - Absolute target path on disk.
  * @param blocks   - Ordered array of `{ heading, vars }` entries.
@@ -90,7 +90,7 @@ function writeMultiBlockVarFile(
     filePath: string,
     blocks: { heading: string; vars: Record<string, string> }[],
 ): void {
-    const out: string[] = ['---', 'type: variables', '---', ''];
+    const out: string[] = ['---', 'artifactType: Variables', '---', ''];
     for (const b of blocks) {
         out.push(`## ${b.heading}`, '```bash');
         for (const [k, v] of Object.entries(b.vars)) { out.push(`${k}=${v}`); }
@@ -101,7 +101,7 @@ function writeMultiBlockVarFile(
 }
 
 /**
- * Writes a non-variables artifact (`type: snippet`) for negative-path coverage.
+ * Writes a non-variables artifact (`artifactType: Snippet`) for negative-path coverage.
  *
  * @param filePath - Absolute target path on disk.
  * @returns void
@@ -112,7 +112,7 @@ function writeMultiBlockVarFile(
 function writeSnippetFile(filePath: string): void {
     const content = [
         '---',
-        'type: snippet',
+        'artifactType: Snippet',
         'title: Not A Var Set',
         '---',
         '',
@@ -146,7 +146,7 @@ suite('VarSetScanner', () => {
         assert.strictEqual(files.length, 2);
         const names = files.map((f: ParsedArtifactFile) => f.fileName).sort();
         assert.deepStrictEqual(names, ['dev', 'prod']);
-        assert.ok(files.every((f: ParsedArtifactFile) => f.frontmatter.type === 'variables'));
+        assert.ok(files.every((f: ParsedArtifactFile) => f.frontmatter.artifactType === 'Variables'));
     });
 
     test('returns empty array for an empty directory', async () => {
@@ -170,10 +170,10 @@ suite('VarSetScanner', () => {
         assert.strictEqual(files[0].fileName, 'dev');
     });
 
-    test('skips files where frontmatter.type is not "variables"', async () => {
+    test('skips files where frontmatter.artifactType is not "Variables"', async () => {
         writeVarFile(path.join(tmpDir, 'real-vars.md'), 'dev', { KEY: 'value' });
         writeSnippetFile(path.join(tmpDir, 'snippet.md'));
-        // No frontmatter at all → falls through to default type 'snippet' → skipped.
+        // No frontmatter at all → falls through to default type 'Snippet' → skipped.
         fs.writeFileSync(path.join(tmpDir, 'no-fm.md'), '```code\necho hi\n```\n', 'utf-8');
 
         const scanner = new VarSetScanner();
@@ -181,7 +181,7 @@ suite('VarSetScanner', () => {
 
         assert.strictEqual(files.length, 1);
         assert.strictEqual(files[0].fileName, 'real-vars');
-        assert.strictEqual(files[0].frontmatter.type, 'variables');
+        assert.strictEqual(files[0].frontmatter.artifactType, 'Variables');
     });
 
     // ── scan — recursion ──────────────────────────────────────────────────────

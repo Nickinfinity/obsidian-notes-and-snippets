@@ -19,7 +19,7 @@ produce exactly this format so that `parse(serialize(x))` round-trips.
 
 ~~~md
 ---
-type: snippet | template | command | agent | variables
+artifactType: Snippet | AIAgentsConfig | Command | Template | Variables | AIPrompt
 title: Human-readable title
 description: Short explanation
 language: javascript
@@ -36,10 +36,32 @@ VK-variableName=defaultValue
 VK-anotherVar=
 ~~~
 
-- **Frontmatter** — YAML between `---` fences. Recognised keys: `type` (required;
-  unknown value falls back to `snippet`), `title`, `description`, `language`,
-  `extension` (template-only, §5.1), `provider` / `model` / `version` (agent-only,
-  §5.2), `tags` (inline array `[a, b]`), `env`, `target`.
+- **Frontmatter** — YAML between `---` fences. Recognised keys: `artifactType`
+  (required; unrecognised value falls back to the directory-derived default,
+  D1e — never a hardcoded literal, and never case-insensitively to a
+  differently-cased spelling of a known value), `title`, `description`,
+  `language`, `extension` (template-only, §5.1), `provider` / `model` /
+  `version` (agent-only, §5.2), `tags` (inline array `[a, b]`), `env`, `target`.
+- **`artifactType` is the only frontmatter key read or emitted, and its values
+  are PascalCase** (`Snippet`, `AIAgentsConfig`, `Command`, `Template`,
+  `Variables`, `AIPrompt`) — exact string match against the `ArtifactType`
+  union, sourced from `ARTIFACTS` (`getAllTypes()`), never a hand-copied list.
+  A legacy `type: <lowercase>` key (or `type: agent`, `AIAgentsConfig`'s old
+  spelling) is **not read** — it is neither a fallback nor a second accepted
+  key. It is simply an unrecognised line: every other frontmatter key in the
+  same block (`title`, `tags`, …) still parses normally, but the artifact's
+  type itself falls back to the directory-derived default, same as an
+  unrecognised `artifactType` value. The **only** path forward for such a file
+  is the **Obsidian Artifacts:
+  Migrate Vault Frontmatter** command (`obsidian-artifacts.migrateFrontmatter`,
+  `src/commands/migrate.command.ts` + `src/services/frontmatter-migration.service.ts`):
+  it always dry-runs first (report in the "Obsidian Artifacts: Migration"
+  output channel), then rewrites `type: <legacy>` → `artifactType: <PascalCase>`
+  only after an explicit modal confirmation naming the file count. The rewrite
+  is a surgical single-line splice inside the first frontmatter block — every
+  other key, including the read-side-only `index:` / `paths:` (§8.7), survives
+  byte-identical. Idempotent: a file already carrying `artifactType:` is left
+  untouched.
 - **Blank line after frontmatter is optional.** The code fence may sit on the
   very next line after the closing `---` (real files do this), or be separated
   by one or more blank lines. A serializer may emit either; round-trip is
@@ -72,10 +94,10 @@ unfenced `vars:` form. Emitting a `vars:` label line immediately before the
 
 ### 1.1 Serializer rules — single-block
 
-- **Canonical frontmatter key order:** `type`, `title`, `description`,
+- **Canonical frontmatter key order:** `artifactType`, `title`, `description`,
   `language`, `extension`, `provider`, `model`, `version`, `tags`, `env`,
   `target` (the serializer's `FRONTMATTER_KEY_ORDER`). Keys with empty/undefined
-  values are omitted (except `type`, always emitted). The type-specific keys
+  values are omitted (except `artifactType`, always emitted). The type-specific keys
   (`extension` = template, `provider`/`model`/`version` = agent) group after
   `language`; reserved keys (`env`, `target`) sit at the end so future additions
   append cleanly.
@@ -138,7 +160,7 @@ time, and either may be empty.
 
 ~~~md
 ---
-type: snippet
+artifactType: Snippet
 title: API URLs
 ---
 
@@ -162,14 +184,14 @@ https://api.example.com
 
 ---
 
-## 3. `type: variables` files
+## 3. `artifactType: Variables` files
 
 The content uses a ` ```vks ` block instead of a ` ```code ` block. Used both
 for environment variable files and for **Variable Sets**.
 
 ~~~md
 ---
-type: variables
+artifactType: Variables
 env: dev
 ---
 
@@ -245,22 +267,23 @@ Closing the tag leaves nothing open. Both render-safe spellings are supported:
 
 ## 5. Per-artifact variations
 
-`type` is set from the chosen artifact; the destination directory comes from
-`ARTIFACTS` in `src/types/constants.ts`.
+`artifactType` is set from the chosen artifact; the destination directory comes
+from `ARTIFACTS` in `src/types/constants.ts`.
 
-| `type` | Vault dir | `language` field | Code fence | Defaults | Multi-block | Notes |
+| `artifactType` | Vault dir | `language` field | Code fence | Defaults | Multi-block | Notes |
 |---|---|---|---|---|---|---|
-| `snippet` | `Snippets` | yes (or plain text) | language or empty | ` ```vks ` | yes | Editor insert. |
-| `template` | `Templates` | yes (or plain text) | language or empty | ` ```vks ` | **no (D1)** | Explorer → **writes a whole file** into the workspace. Single-block only. `extension:` overrides the fence language (see §5.1). May carry `index: true` — a **template index** whose body links the files one run scaffolds (§8). |
-| `command` | `Commands` | yes — **locked to `bash`** | `bash` (locked by serializer) | ` ```vks ` | yes | Terminal insert. |
-| `agent` | `AgentsConf` | optional | language, empty, **or none — flags instead (§7)** | ` ```vks ` | yes* | Explorer → **writes a whole file** into the workspace (like `template`), named from `target:` (§5.2). `provider` / `model` / `version` record the AI provenance (agent-only, §5.2). May carry `index: true` (§8), like `template`. *Create File enforces a single block/region. |
-| `variables` | `Variables` | n/a | ` ```vks ` only | the block itself | yes (sub-sets) | `env:` labels the environment. Variable Sets live here. |
+| `Snippet` | `Snippets` | yes (or plain text) | language or empty | ` ```vks ` | yes | Editor insert. |
+| `Template` | `Templates` | yes (or plain text) | language or empty | ` ```vks ` | **no (D1)** | Explorer → **writes a whole file** into the workspace. Single-block only. `extension:` overrides the fence language (see §5.1). May carry `index: true` — a **template index** whose body links the files one run scaffolds (§8). |
+| `Command` | `Commands` | yes — **locked to `bash`** | `bash` (locked by serializer) | ` ```vks ` | yes | Terminal insert. |
+| `AIAgentsConfig` | `AIAgentsConf` | optional | language, empty, **or none — flags instead (§7)** | ` ```vks ` | yes* | Explorer → **writes a whole file** into the workspace (like `template`), named from `target:` (§5.2). `provider` / `model` / `version` record the AI provenance (agent-only, §5.2). May carry `index: true` (§8), like `template`. *Create File enforces a single block/region. |
+| `Variables` | `Variables` | n/a | ` ```vks ` only | the block itself | yes (sub-sets) | `env:` labels the environment. Variable Sets live here. |
+| `AIPrompt` | `AIPrompts` | hidden — always `markdown` | none — **flags only** (§7), no language picker | ` ```vks ` (file-level, outside the flags) | yes — named flag regions become blocks | Editor **or** terminal insert — the only type declaring both `contexts`; the target is resolved from which menu invoked it, not live focus (`CLAUDE.md`'s insert-commands section). A file with **no flags and no fence parses to empty `code`** — accepted behaviour, not a bug (§5.3). |
 
 Rules a serializer enforces:
 
 - **Single-block:** `language` allowed in frontmatter. Multi-block: no top-level
   `language` — language lives on each block's fence.
-- **`command`:** no `language` selector in the create UI. The type is treated
+- **`Command`:** no `language` selector in the create UI. The type is treated
   as **locked to `bash`** (`form.language.mode === 'locked'`,
   `form.language.default === 'bash'` in `constants.ts`). The serializer emits
   `language: bash` in single-block frontmatter and `bash` on every block fence
@@ -274,11 +297,11 @@ Rules a serializer enforces:
   allows zero characters.
 - **`tags`:** emit `tags: [a, b]`; omit the key entirely when there are no tags.
 - **vks fence:** emit only when at least one var has a non-empty default value.
-- **`extension`:** a `type: template`-only frontmatter key. Emitted verbatim
+- **`extension`:** a `Template`-only frontmatter key. Emitted verbatim
   (single line enforced) when non-empty, in the key order
-  `type · title · description · language · extension · provider · model · version · tags · env · target`.
+  `artifactType · title · description · language · extension · provider · model · version · tags · env · target`.
   Parsed as a plain string. Absent/empty for every other type.
-- **`provider` / `model` / `version`:** `type: agent`-only frontmatter keys
+- **`provider` / `model` / `version`:** `AIAgentsConfig`-only frontmatter keys
   (§5.2). Each emitted verbatim (single line enforced) when non-empty, in the
   key order above. Parsed as plain strings. Absent/empty for every other type.
 - **`index` / `paths`:** whole-file-type-only and **read-side only** — the
@@ -288,7 +311,7 @@ Rules a serializer enforces:
 
 ### 5.1 Templates — whole-file behaviour
 
-A `template` is not a fragment inserted at the cursor; invoking **Insert
+A `Template` is not a fragment inserted at the cursor; invoking **Insert
 Template** from the Explorer writes the artifact's single code block to disk as a
 real file, with `<VK-xxx>` variables resolved exactly as every other artifact
 resolves them.
@@ -311,13 +334,13 @@ resolves them.
 
 ### 5.2 Agents — provider / model / version
 
-An `agent` config records which AI it targets via three optional, **agent-only**
-free-text frontmatter keys. They are metadata only — they do not change insert or
-target-file write behaviour.
+An `AIAgentsConfig` config records which AI it targets via three optional,
+**agent-only** free-text frontmatter keys. They are metadata only — they do
+not change insert or target-file write behaviour.
 
 ~~~md
 ---
-type: agent
+artifactType: AIAgentsConfig
 title: Code reviewer
 provider: Claude
 model: Opus
@@ -334,7 +357,7 @@ version: "4.8"
 - **Round-trip.** A hand-authored agent file carrying these keys preserves them
   through `parse(serialize(x))`; the create form seeds its inputs from them.
 - **Multi-block (D4).** The agent create form reuses the multi-block machinery
-  (`form.multiBlock === true`), matching the §5 agent row.
+  (`form.multiBlock === true`), matching the §5 `AIAgentsConfig` row.
 
 **Whole-file behaviour (Explorer → Create File).** Like a `template`, invoking an
 agent config from the Explorer **writes its code block to disk as a real file**
@@ -354,6 +377,34 @@ for both the preview's `Create File` label and the write-vs-insert branch.
   normally delimited by flags (§7) rather than wrapped in a fence. Both shapes
   parse; the write path is identical.
 
+### 5.3 AI Prompts — flags, and the empty-payload caveat
+
+An `AIPrompt` lives in `AIPrompts/` and is authored with flags (§7) exactly
+like an agent config's markdown payload — there is no new parsing for it, and
+no fence: `form.language.mode` is `'hidden'`, so the create form never shows a
+language selector, and the fence language defaults to `markdown` the same way
+a flagged agent config's does.
+
+~~~md
+---
+artifactType: AIPrompt
+title: Code review request
+---
+
+%%oa:start%%
+Review <VK-repo_name> and report findings.
+%%oa:end%%
+~~~
+
+**Empty payload is accepted behaviour, not a bug.** `AIPrompt` is an *insert*
+type (`Snippet`/`Command`-shaped: `writesFile` is absent from its `ARTIFACTS`
+row), not a whole-file type — so the §7.5 rule-3 bare-body fallback, which only
+fires for `writesFile` types (`Template`, `AIAgentsConfig`), never applies to
+it. A prompt file with **no flags and no fence** therefore parses to an empty
+`code` string, same as an empty `Snippet` or `Command` file would. Author a
+prompt with at least one `%%oa:start%%…%%oa:end%%` region (or, unconventionally,
+a fence) to give it a payload.
+
 ---
 
 ## 6. Variable Sets — storage shape
@@ -362,7 +413,7 @@ for both the preview's `Create File` label and the write-vs-insert branch.
 `CLAUDE.md`. Only the on-disk shape lives here.)
 
 - Variable set files live in the vault's `Variables/` directory with
-  `type: variables` frontmatter.
+  `artifactType: Variables` frontmatter.
 - A single-block variable file uses one ` ```vks ` fence — its top-level vars
   are the whole set.
 - A multi-block variable file uses `## Heading` + ` ```vks ` blocks. Each
@@ -373,14 +424,14 @@ for both the preview's `Create File` label and the write-vs-insert branch.
 ## 7. Flags — plain-markdown payloads
 
 A vault note *is* markdown. When the artifact's payload is itself markdown — an
-agent config, and the planned AI-prompt snippet subtype — there is nothing to
-wrap it in: a ` ``` ` fence is wrong (the payload may contain fences of its own)
-and a `##` heading would swallow the author's surrounding notes. **Flags** mark
-where the artifact starts and ends:
+agent config, or an `AIPrompt` (§5.3) — there is nothing to wrap it in: a
+` ``` ` fence is wrong (the payload may contain fences of its own) and a `##`
+heading would swallow the author's surrounding notes. **Flags** mark where the
+artifact starts and ends:
 
 ~~~md
 ---
-type: agent
+artifactType: AIAgentsConfig
 title: Code reviewer
 target: CLAUDE.md
 ---
@@ -499,7 +550,7 @@ output** (§4.1 has the full table).
 
 This is a **rendering-only** concern: the extension parses, resolves and writes
 every spelling identically, and payloads inside a ` ``` ` fence are immune (no
-HTML is parsed there). The vault's `AgentsConf/test/*.md` examples use the
+HTML is parsed there). The vault's `AIAgentsConf/test/*.md` examples use the
 underscore form.
 
 ### 7.4 Whole-file types
@@ -507,8 +558,9 @@ underscore form.
 Flags need no special handling in the Create File flow: the region content lands
 in `code`, so `validateSingleBlock` (2+ regions → the same "one file" error) and
 `resolveOutputFileName` (`target:` for agents, extension chain for templates)
-apply to a flagged file exactly as to a fenced one. Adding the AI-prompt snippet
-subtype later requires **no extraction code** — only its `ARTIFACTS` row.
+apply to a flagged file exactly as to a fenced one. This is also why the
+`AIPrompt` type (§5.3) required **no extraction code** — only its `ARTIFACTS`
+row — even though it is not itself a whole-file type.
 
 **Serializer.** Flags are a read-side format today: the create form still writes
 the fenced shape, and `parse(serialize(x))` is unaffected because the serializer
@@ -517,12 +569,13 @@ never emits flags. Hand-authored flagged files are edited through **Edit .md**
 
 ### 7.5 Flags are optional for whole-file types
 
-A `template` or `agent` file **is** the artifact, so when it is a single block
-there is nothing to delimit — write the note and leave the flags out entirely:
+A `Template` or `AIAgentsConfig` file **is** the artifact, so when it is a
+single block there is nothing to delimit — write the note and leave the flags
+out entirely:
 
 ~~~md
 ---
-type: agent
+artifactType: AIAgentsConfig
 title: Code reviewer
 target: CLAUDE.md
 ---
@@ -542,13 +595,15 @@ Precedence, strictly ordered so no existing file changes meaning:
 1. **Flags** — if the file has any region, that is the payload.
 2. **Code fence** — the classic shape; a ` ```vks ` fence does not count (it is
    the defaults section, not content).
-3. **Bare body** — only for types with `writesFile` (`template`, `agent`): the
-   whole body minus its `vars:` / ` ```vks ` section, with `language: markdown`.
+3. **Bare body** — only for types with `writesFile` (`Template`,
+   `AIAgentsConfig`): the whole body minus its `vars:` / ` ```vks ` section,
+   with `language: markdown`.
 
-Cursor-insert types (`snippet`, `command`, `variables`) never take rule 3 — a
-note with no fence and no flags yields no code, exactly as before. When
-multi-block support arrives for the whole-file types, flags become the way to
-mark each region; a single-region file will still be able to omit them.
+Insert types — `Snippet`, `Command`, `Variables`, and **`AIPrompt`** (§5.3,
+despite also being flag-authored) — never take rule 3: a note with no fence
+and no flags yields no code, exactly as before. When multi-block support
+arrives for the whole-file types, flags become the way to mark each region; a
+single-region file will still be able to omit them.
 
 ---
 
@@ -561,7 +616,7 @@ payload, not the code:
 
 ~~~md
 ---
-type: template
+artifactType: Template
 title: React component scaffold
 index: true
 paths: [src/components, packages/ui/src]
@@ -574,7 +629,7 @@ paths: [src/components, packages/ui/src]
 
 It is deliberately additive: **no** new artifact type, **no** new vault
 directory, **no** new command and **no** new context-menu entry. An index lives
-in `Templates/` or `AgentsConf/` like any other file of its type.
+in `Templates/` or `AIAgentsConf/` like any other file of its type.
 
 ### 8.1 The two keys
 
@@ -585,8 +640,8 @@ in `Templates/` or `AgentsConf/` like any other file of its type.
 
 **`index: true` is valid only on the whole-file types.** A run can only *write*
 files, so `isIndexArtifact` requires `fm.index === true` **and**
-`writesWholeFile(fm.type)` — a `snippet`, `command` or `variables` file carrying
-`index: true` is not an index and behaves exactly as before.
+`writesWholeFile(fm.artifactType)` — a `Snippet`, `Command` or `Variables` file
+carrying `index: true` is not an index and behaves exactly as before.
 
 **An index is never written to disk verbatim.** Pressing Enter on one in the
 picker starts a run; a mouse click on **Create File** while merely hovering it

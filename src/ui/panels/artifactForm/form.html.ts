@@ -47,21 +47,21 @@ export interface BuildFormHtmlArgs {
  */
 export function buildFormHtml(args: BuildFormHtmlArgs): string {
     const { model, cspSource, cssUri, nonce, codeBlockHtml } = args;
-    const languageMode = getLanguageMode(model.type);
-    const lockedLang   = getDefaultLanguage(model.type);
+    const languageMode = getLanguageMode(model.artifactType);
+    const lockedLang   = getDefaultLanguage(model.artifactType);
     const multi        = model.blocks.length > 1;
-    const multiAllowed = canMultiBlock(model.type);
+    const multiAllowed = canMultiBlock(model.artifactType);
 
-    const singular     = getTypeSingular(model.type);
+    const singular     = getTypeSingular(model.artifactType);
     const head         = buildHead(nonce, cspSource, cssUri);
     const frontmatter  = buildFrontmatterSection(model);
     const blocksArea   = multi
         ? buildMultiBlockArea(model, languageMode, lockedLang, codeBlockHtml)
         : buildSingleBlockContent(model.blocks[0], 0, languageMode, lockedLang, codeBlockHtml);
-    const addBtn       = multiAllowed ? buildAddBlockButton(model.type) : '';
-    const footer       = buildFooter(model.type);
+    const addBtn       = multiAllowed ? buildAddBlockButton(model.artifactType) : '';
+    const footer       = buildFooter(model.artifactType);
     const areaClass    = `blocks-area${multi ? ' multi-block' : ''}`;
-    const areaAttrs    = `id="blocks-area" class="${areaClass}" data-lang-mode="${escHtml(languageMode)}" data-default-lang="${escHtml(lockedLang)}" data-type="${escHtml(model.type)}" data-singular="${escHtml(singular)}"`;
+    const areaAttrs    = `id="blocks-area" class="${areaClass}" data-lang-mode="${escHtml(languageMode)}" data-default-lang="${escHtml(lockedLang)}" data-type="${escHtml(model.artifactType)}" data-singular="${escHtml(singular)}"`;
 
     const scriptTag = args.clientJs
         ? buildScriptTag(nonce, args.clientJs)
@@ -165,11 +165,11 @@ ${chips}    <input type="text" id="tag-input" class="tag-input" placeholder="Add
  * @returns The extension form-section HTML, or `''` for non-template types.
  *
  * @example
- * buildExtensionField({ type: 'template', extension: '.tsx', ... }) // → '<div class="form-section">…'
- * buildExtensionField({ type: 'snippet', ... })                     // → ''
+ * buildExtensionField({ artifactType: 'Template', extension: '.tsx', ... }) // → '<div class="form-section">…'
+ * buildExtensionField({ artifactType: 'Snippet', ... })                     // → ''
  */
 function buildExtensionField(model: ArtifactFormModel): string {
-    if (model.type !== 'template') { return ''; }
+    if (model.artifactType !== 'Template') { return ''; }
     return buildOptionalTextField('extension', 'File extension', model.extension, 'e.g. .tsx — overrides the fence language');
 }
 
@@ -213,11 +213,11 @@ function buildOptionalTextField(id: string, label: string, value: string | undef
  * @returns The agent form-section HTML, or `''` for non-agent types.
  *
  * @example
- * buildAgentFieldsSection({ type: 'agent', provider: 'Claude', ... }) // → '<div class="form-section">…'
- * buildAgentFieldsSection({ type: 'snippet', ... })                   // → ''
+ * buildAgentFieldsSection({ artifactType: 'AIAgentsConfig', provider: 'Claude', ... }) // → '<div class="form-section">…'
+ * buildAgentFieldsSection({ artifactType: 'Snippet', ... })                   // → ''
  */
 function buildAgentFieldsSection(model: ArtifactFormModel): string {
-    if (model.type !== 'agent') { return ''; }
+    if (model.artifactType !== 'AIAgentsConfig') { return ''; }
     return buildOptionalTextField('provider', 'Provider', model.provider, 'e.g. Claude')
         + buildOptionalTextField('model', 'Model', model.model, 'e.g. Opus')
         + buildOptionalTextField('version', 'Version', model.version, 'e.g. 4.8');
@@ -251,9 +251,9 @@ function buildTagChips(tags: string[]): string {
  * @returns HTML string for the add-block button.
  *
  * @example
- * buildAddBlockButton('snippet') // → '<button …>+ Add additional snippet</button>'
+ * buildAddBlockButton('Snippet') // → '<button …>+ Add additional snippet</button>'
  */
-function buildAddBlockButton(type: ArtifactFormModel['type']): string {
+function buildAddBlockButton(type: ArtifactFormModel['artifactType']): string {
     const label = escHtml(labelForAddBlock(type));
     return `<button id="add-block-btn" class="add-block-btn">${label}</button>`;
 }
@@ -270,9 +270,9 @@ function buildAddBlockButton(type: ArtifactFormModel['type']): string {
  * @returns HTML string for the form footer.
  *
  * @example
- * buildFooter('snippet')
+ * buildFooter('Snippet')
  */
-function buildFooter(type: ArtifactFormModel['type']): string {
+function buildFooter(type: ArtifactFormModel['artifactType']): string {
     const deleteLabel = escHtml(labelForDeleteEntire(type));
     return `<div class="form-footer">
   <button id="save-btn" class="btn btn-primary">Save</button>

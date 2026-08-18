@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { parseFromContent } from '../../../services/parser.service.js';
+import { parseFromContent, resolveVars } from '../../../services/parser.service.js';
 import { renderCodeHtml, renderCodeRowsHtml } from '../../../services/render.service.js';
 import { writesWholeFile } from '../../../services/artifact-type-config.service.js';
 import { patchFrontmatterField, patchVarDefaults, type BlockRef } from '../../../services/artifact-patcher.service.js';
@@ -7,7 +7,7 @@ import { PreviewModeController, type SectionKey } from '../../../services/previe
 import { getNonce } from '../../../utils/helpers.js';
 import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js';
 import { out } from './shared.js';
-import { POPUP_VIEW_TYPE, performInsert } from './preview.helpers.js';
+import { POPUP_VIEW_TYPE, performInsert, type InvocationSurface } from './preview.helpers.js';
 import { renderPreviewHtml, renderMultiBlockPreviewHtml, renderPopupEmptyHtml, mergeVarsWithDefaults } from './preview.render.js';
 import { FullEditController } from './fullEditor.js';
 import { BlockEditController } from './blockEditor.js';
@@ -35,6 +35,8 @@ export interface PreviewCallbacks {
     storageUri: vscode.Uri;
     /** Explorer URI a Template was invoked on (D2); `undefined` for non-template flows. */
     destUri?: vscode.Uri;
+    /** Which context-menu surface the insert command was invoked from (T3); threaded to `performInsert`. */
+    invocationSurface: InvocationSurface;
 }
 
 /**
@@ -223,6 +225,7 @@ export class PreviewPanelController {
         else if (cmd === 'editBlock')     { await this.handleEditBlock(); }
         else if (cmd === 'saveSection')   { await this.handleSaveSection(msg); }
         else if (cmd === 'insert')        { this.handleInsert(msg); }
+        else if (cmd === 'copy')          { this.handleCopy(msg); }
         else if (cmd === 'cancel')        { this.cancel(); }
         else if (cmd === 'pickVarSet')    { await this.varSet.handlePickVarSet(msg); }
         else if (cmd === 'confirmApply')  { this.varSet.handleConfirmApply(); }
@@ -293,7 +296,7 @@ export class PreviewPanelController {
         }
         // Templates/agent configs write a whole file instead of inserting at the
         // cursor; `writesWholeFile` is the single source shared with the label.
-        if (writesWholeFile(artifact.frontmatter.type)) {
+        if (writesWholeFile(artifact.frontmatter.artifactType)) {
             void this.handleCreateFile(msg, artifact);
             return;
         }
@@ -301,11 +304,31 @@ export class PreviewPanelController {
         const code         = this.resolveInsertCode(msg, artifact);
         const resolvedVars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
 
-        performInsert(this.cb.targetEditor, { ...artifact, code }, resolvedVars);
+        void performInsert(this.cb.targetEditor, { ...artifact, code }, resolvedVars, this.cb.invocationSurface);
         this.fullEdit.teardown();
         void this.blockEdit.teardown();
         this.dispose();
         this.cb.closePicker();
+    }
+
+    /**
+     * Copies the resolved code to the clipboard — every artifact type, no
+     * `writesWholeFile` / `isIndexArtifact` branching (T2 — the button is
+     * universal by design). Resolution mirrors `handleInsert`: the same
+     * `resolveInsertCode` + `mergeVarsWithDefaults` → `resolveVars` chain,
+     * so Copy and Insert never disagree on what "this artifact" means.
+     * @param msg - `{ code, vars }` posted by the webview's Copy button.
+     * @example this.handleCopy({ code: 'ping <VK-host>', vars: { 'VK-host': 'db' } });
+     */
+    private handleCopy(msg: Record<string, unknown>): void {
+        const artifact = this.currentArtifact;
+        if (!artifact) { return; }
+        const code         = this.resolveInsertCode(msg, artifact);
+        const resolvedVars = mergeVarsWithDefaults(msg.vars as Record<string, string>, artifact.vars);
+        // Chained, not fire-and-forget: a remote/SSH host can reject the write, and the
+        // toast must not claim success when it did (reviewer finding 1).
+        void vscode.env.clipboard.writeText(resolveVars(code, resolvedVars))
+            .then(() => vscode.window.showInformationMessage('Obsidian Artifacts: Copied to clipboard.'));
     }
 
     /** Routes to the Create File flow (D12); armed (batch step) pins `destDir`, skips

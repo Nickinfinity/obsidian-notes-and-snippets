@@ -63,7 +63,7 @@ suite('buildFormHtml — snapshots', () => {
 
     test('snippet single-block — language selector enabled', () => {
         const model: ArtifactFormModel = {
-            type:        'snippet',
+            artifactType: 'Snippet',
             title:       'Test Snippet',
             description: 'A test snippet.',
             tags:        ['testing', 'example'],
@@ -90,7 +90,7 @@ suite('buildFormHtml — snapshots', () => {
 
     test('command single-block — language selector disabled showing bash', () => {
         const model: ArtifactFormModel = {
-            type:        'command',
+            artifactType: 'Command',
             title:       'Deploy',
             description: '',
             tags:        [],
@@ -118,7 +118,7 @@ suite('buildFormHtml — snapshots', () => {
 
     test('snippet multi-block (2 blocks) — cards with reorder buttons', () => {
         const model: ArtifactFormModel = {
-            type:        'snippet',
+            artifactType: 'Snippet',
             title:       'Multi Snippet',
             description: 'File-level description.',
             tags:        ['multi'],
@@ -171,7 +171,7 @@ suite('buildFormHtml — template', () => {
 
     function templateModel(extension = ''): ArtifactFormModel {
         return {
-            type:        'template',
+            artifactType: 'Template',
             title:       'React Component',
             description: '',
             extension,
@@ -195,7 +195,7 @@ suite('buildFormHtml — template', () => {
 
     test('a snippet form has no extension input', () => {
         const snippet: ArtifactFormModel = {
-            type: 'snippet', title: 'S', description: '', tags: [],
+            artifactType: 'Snippet', title: 'S', description: '', tags: [],
             blocks: [{ heading: '', description: '', language: 'javascript', code: 'x', vars: [] }],
         };
         assert.ok(!buildFormHtml({ ...ARGS, model: snippet }).includes('id="extension"'));
@@ -212,7 +212,7 @@ suite('buildFormHtml — agent', () => {
 
     function agentModel(over: Partial<ArtifactFormModel> = {}): ArtifactFormModel {
         return {
-            type:        'agent',
+            artifactType: 'AIAgentsConfig',
             title:       'Code reviewer',
             description: '',
             provider:    'Claude',
@@ -240,7 +240,7 @@ suite('buildFormHtml — agent', () => {
 
     test('a snippet form has no provider/model/version inputs', () => {
         const snippet: ArtifactFormModel = {
-            type: 'snippet', title: 'S', description: '', tags: [],
+            artifactType: 'Snippet', title: 'S', description: '', tags: [],
             blocks: [{ heading: '', description: '', language: 'javascript', code: 'x', vars: [] }],
         };
         const html = buildFormHtml({ ...ARGS, model: snippet });

@@ -28,7 +28,7 @@ suite('artifact-type-config.service', () => {
 
     suite('getFormConfig', () => {
         test('snippet returns its form object', () => {
-            const cfg = getFormConfig('snippet');
+            const cfg = getFormConfig('Snippet');
             assert.strictEqual(cfg.language.mode, 'free');
             assert.strictEqual(cfg.language.default, '');
             assert.strictEqual(cfg.label.singular, 'snippet');
@@ -36,7 +36,7 @@ suite('artifact-type-config.service', () => {
         });
 
         test('command returns its form object', () => {
-            const cfg = getFormConfig('command');
+            const cfg = getFormConfig('Command');
             assert.strictEqual(cfg.language.mode, 'locked');
             assert.strictEqual(cfg.language.default, 'bash');
             assert.strictEqual(cfg.label.singular, 'command');
@@ -44,7 +44,7 @@ suite('artifact-type-config.service', () => {
         });
 
         test('agent returns its form object (create-form-enabled, D4)', () => {
-            const cfg = getFormConfig('agent');
+            const cfg = getFormConfig('AIAgentsConfig');
             assert.strictEqual(cfg.language.mode, 'free');
             assert.strictEqual(cfg.language.default, '');
             assert.strictEqual(cfg.label.singular, 'agent config');
@@ -52,14 +52,14 @@ suite('artifact-type-config.service', () => {
         });
 
         test('template returns its form object (Templates-as-files)', () => {
-            const cfg = getFormConfig('template');
+            const cfg = getFormConfig('Template');
             assert.strictEqual(cfg.language.mode, 'free');
             assert.strictEqual(cfg.label.singular, 'template');
             assert.strictEqual(cfg.multiBlock, false);
         });
 
         test('variables throws (own save-as flow)', () => {
-            assert.throws(() => getFormConfig('variables'), /variables/);
+            assert.throws(() => getFormConfig('Variables'), /Variables/);
         });
 
         test('unknown type throws', () => {
@@ -71,19 +71,19 @@ suite('artifact-type-config.service', () => {
 
     suite('getLanguageMode', () => {
         test('snippet === free', () => {
-            assert.strictEqual(getLanguageMode('snippet'), 'free');
+            assert.strictEqual(getLanguageMode('Snippet'), 'free');
         });
 
         test('command === locked', () => {
-            assert.strictEqual(getLanguageMode('command'), 'locked');
+            assert.strictEqual(getLanguageMode('Command'), 'locked');
         });
 
         test('agent === free (create-form-enabled, D4)', () => {
-            assert.strictEqual(getLanguageMode('agent'), 'free');
+            assert.strictEqual(getLanguageMode('AIAgentsConfig'), 'free');
         });
 
         test('throws for non-create-form type', () => {
-            assert.throws(() => getLanguageMode('variables'));
+            assert.throws(() => getLanguageMode('Variables'));
         });
     });
 
@@ -91,15 +91,15 @@ suite('artifact-type-config.service', () => {
 
     suite('getDefaultLanguage', () => {
         test('snippet === "" (plain text)', () => {
-            assert.strictEqual(getDefaultLanguage('snippet'), '');
+            assert.strictEqual(getDefaultLanguage('Snippet'), '');
         });
 
         test('command === "bash"', () => {
-            assert.strictEqual(getDefaultLanguage('command'), 'bash');
+            assert.strictEqual(getDefaultLanguage('Command'), 'bash');
         });
 
         test('throws for non-create-form type', () => {
-            assert.throws(() => getDefaultLanguage('variables'));
+            assert.throws(() => getDefaultLanguage('Variables'));
         });
     });
 
@@ -107,15 +107,15 @@ suite('artifact-type-config.service', () => {
 
     suite('getTypeSingular', () => {
         test('snippet === "snippet"', () => {
-            assert.strictEqual(getTypeSingular('snippet'), 'snippet');
+            assert.strictEqual(getTypeSingular('Snippet'), 'snippet');
         });
 
         test('command === "command"', () => {
-            assert.strictEqual(getTypeSingular('command'), 'command');
+            assert.strictEqual(getTypeSingular('Command'), 'command');
         });
 
         test('throws for non-create-form type', () => {
-            assert.throws(() => getTypeSingular('variables'));
+            assert.throws(() => getTypeSingular('Variables'));
         });
     });
 
@@ -123,19 +123,19 @@ suite('artifact-type-config.service', () => {
 
     suite('canMultiBlock', () => {
         test('snippet === true', () => {
-            assert.strictEqual(canMultiBlock('snippet'), true);
+            assert.strictEqual(canMultiBlock('Snippet'), true);
         });
 
         test('command === true', () => {
-            assert.strictEqual(canMultiBlock('command'), true);
+            assert.strictEqual(canMultiBlock('Command'), true);
         });
 
         test('agent === true (D4)', () => {
-            assert.strictEqual(canMultiBlock('agent'), true);
+            assert.strictEqual(canMultiBlock('AIAgentsConfig'), true);
         });
 
         test('throws for non-create-form type', () => {
-            assert.throws(() => canMultiBlock('variables'));
+            assert.throws(() => canMultiBlock('Variables'));
         });
     });
 
@@ -146,9 +146,9 @@ suite('artifact-type-config.service', () => {
         // to satisfy code drift. The helper derives the list from
         // ARTIFACTS[*].createForm === true. Adding a new createForm type
         // anywhere must extend the result automatically.
-        test('returns exactly [agent, snippet, command, template] (order-insensitive)', () => {
+        test('returns exactly [AIAgentsConfig, AIPrompt, Snippet, Command, Template] (order-insensitive)', () => {
             const sorted = [...getCreateFormTypes()].sort();
-            assert.deepStrictEqual(sorted, ['agent', 'command', 'snippet', 'template']);
+            assert.deepStrictEqual(sorted, ['AIAgentsConfig', 'AIPrompt', 'Command', 'Snippet', 'Template']);
         });
     });
 
@@ -158,17 +158,17 @@ suite('artifact-type-config.service', () => {
         // Single source for the Explorer "Create File" flow — both the preview
         // label and the insert handler branch on it, so they cannot disagree.
         test('template writes a whole file', () => {
-            assert.strictEqual(writesWholeFile('template'), true);
+            assert.strictEqual(writesWholeFile('Template'), true);
         });
 
         test('agent writes a whole file (target:-named config)', () => {
-            assert.strictEqual(writesWholeFile('agent'), true);
+            assert.strictEqual(writesWholeFile('AIAgentsConfig'), true);
         });
 
         test('cursor-insert / terminal types do not', () => {
-            assert.strictEqual(writesWholeFile('snippet'), false);
-            assert.strictEqual(writesWholeFile('command'), false);
-            assert.strictEqual(writesWholeFile('variables'), false);
+            assert.strictEqual(writesWholeFile('Snippet'), false);
+            assert.strictEqual(writesWholeFile('Command'), false);
+            assert.strictEqual(writesWholeFile('Variables'), false);
         });
 
         /**
@@ -191,18 +191,18 @@ suite('artifact-type-config.service', () => {
         // Non-throwing sibling of canMultiBlock — the picker asks it about every
         // parsed file, including types with no create form.
         test('template forces a single block (D1)', () => {
-            assert.strictEqual(forcesSingleBlock('template'), true);
+            assert.strictEqual(forcesSingleBlock('Template'), true);
         });
 
         test('multi-block-capable types do not', () => {
-            assert.strictEqual(forcesSingleBlock('agent'), false);
-            assert.strictEqual(forcesSingleBlock('snippet'), false);
-            assert.strictEqual(forcesSingleBlock('command'), false);
+            assert.strictEqual(forcesSingleBlock('AIAgentsConfig'), false);
+            assert.strictEqual(forcesSingleBlock('Snippet'), false);
+            assert.strictEqual(forcesSingleBlock('Command'), false);
         });
 
         test('a type with no form config answers false instead of throwing', () => {
-            // canMultiBlock('variables') throws; navigation code must not need a try/catch.
-            assert.strictEqual(forcesSingleBlock('variables'), false);
+            // canMultiBlock('Variables') throws; navigation code must not need a try/catch.
+            assert.strictEqual(forcesSingleBlock('Variables'), false);
         });
 
         /** Drift guard: it is the inverse of the same `form.multiBlock` flag. */
@@ -221,7 +221,7 @@ suite('artifact-type-config.service', () => {
 
         /**
          * @example
-         * getEntry('snippet').dir === 'Snippets'
+         * getEntry('Snippet').dir === 'Snippets'
          */
         test('returns the matching entry for every declared type', () => {
             for (const entry of ARTIFACTS) {
@@ -231,13 +231,13 @@ suite('artifact-type-config.service', () => {
         });
 
         test('exposes dir and name for a create-form type', () => {
-            assert.strictEqual(getEntry('snippet').dir, 'Snippets');
-            assert.strictEqual(getEntry('command').dir, 'Commands');
+            assert.strictEqual(getEntry('Snippet').dir, 'Snippets');
+            assert.strictEqual(getEntry('Command').dir, 'Commands');
         });
 
         test('works for non-create-form types too (unlike getFormConfig)', () => {
-            assert.strictEqual(getEntry('variables').dir, 'Variables');
-            assert.strictEqual(getEntry('agent').dir, 'AgentsConf');
+            assert.strictEqual(getEntry('Variables').dir, 'Variables');
+            assert.strictEqual(getEntry('AIAgentsConfig').dir, 'AIAgentsConf');
         });
 
         test('throws on an unknown type rather than returning undefined', () => {
@@ -252,16 +252,16 @@ suite('artifact-type-config.service', () => {
 
         /**
          * @example
-         * getAllTypes() // → ['snippet', 'agent', 'command', 'template', 'variables']
+         * getAllTypes() // → ['Snippet', 'AIAgentsConfig', 'Command', 'Template', 'Variables']
          */
         test('returns every declared type in declaration order', () => {
             assert.deepStrictEqual(getAllTypes(), ARTIFACTS.map(e => e.type));
         });
 
         test('includes non-create-form types', () => {
-            assert.ok(getAllTypes().includes('variables'));
-            assert.ok(getAllTypes().includes('agent'));
-            assert.ok(getAllTypes().includes('template'));
+            assert.ok(getAllTypes().includes('Variables'));
+            assert.ok(getAllTypes().includes('AIAgentsConfig'));
+            assert.ok(getAllTypes().includes('Template'));
         });
     });
 });

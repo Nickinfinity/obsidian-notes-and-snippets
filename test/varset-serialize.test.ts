@@ -41,7 +41,7 @@ const CASES: {
  * @returns The golden file's exact contents.
  *
  * @example
- * readGolden('bare') // '---\ntype: variables\n…'
+ * readGolden('bare') // '---\nartifactType: Variables\n…'
  */
 function readGolden(name: string): string {
     return fs.readFileSync(path.join(SNAPSHOT_DIR, `${name}.md`), 'utf8');
@@ -71,7 +71,7 @@ suite('variable-set serialization — parse round-trip', () => {
         for (const c of CASES) {
             const parsed = parseFromContent(readGolden(c.name), `/vault/Variables/${c.name}.md`, '/vault');
 
-            assert.strictEqual(parsed.frontmatter.type, 'variables', `${c.name}: type`);
+            assert.strictEqual(parsed.frontmatter.artifactType, 'Variables', `${c.name}: type`);
             assert.strictEqual(parsed.frontmatter.title, c.title, `${c.name}: title`);
             // Covers the emitted frontmatter keys the serializer and parser must
             // agree on for this shape (R3): every key written is read back.

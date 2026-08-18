@@ -134,6 +134,22 @@ export interface InsertMsg {
 }
 
 /**
+ * Webview requests that the extension copy the resolved code to the clipboard,
+ * for every artifact type — the single-block preview's one button, or one
+ * block's button when reached via the multi-block navigator (T2). Resolution
+ * mirrors `insert`: current code + vars, same three-tier `resolveVars` path,
+ * clipboard only — never the cursor or terminal.
+ *
+ * @example
+ * vscode.postMessage({ command: 'copy', vars: { 'VK-host': 'localhost' }, code: 'ping <VK-host>' });
+ */
+export interface CopyMsg {
+    command: 'copy';
+    vars: Record<string, string>;
+    code: string;
+}
+
+/**
  * Webview cancels the entire artifact insert operation.
  *
  * @example
@@ -157,6 +173,7 @@ export type WebviewToExtensionMsg =
     | FullEditMsg
     | BackToPreviewMsg
     | InsertMsg
+    | CopyMsg
     | CancelMsg;
 
 // ── Extension → Webview ───────────────────────────────────────────────────────

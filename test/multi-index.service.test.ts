@@ -198,30 +198,30 @@ suite('resolveLinkTarget', () => {
 
 suite('isIndexArtifact', () => {
 
-    const fm = (overrides: Partial<ParsedFrontmatter>): ParsedFrontmatter => ({ type: 'template', ...overrides });
+    const fm = (overrides: Partial<ParsedFrontmatter>): ParsedFrontmatter => ({ artifactType: 'Template', ...overrides });
 
     test('true for a template carrying index: true', () => {
-        assert.strictEqual(isIndexArtifact(fm({ type: 'template', index: true })), true);
+        assert.strictEqual(isIndexArtifact(fm({ artifactType: 'Template', index: true })), true);
     });
 
     test('true for an agent carrying index: true', () => {
-        assert.strictEqual(isIndexArtifact(fm({ type: 'agent', index: true })), true);
+        assert.strictEqual(isIndexArtifact(fm({ artifactType: 'AIAgentsConfig', index: true })), true);
     });
 
     test('false for a snippet carrying index: true — a run can only write files', () => {
-        assert.strictEqual(isIndexArtifact(fm({ type: 'snippet', index: true })), false);
+        assert.strictEqual(isIndexArtifact(fm({ artifactType: 'Snippet', index: true })), false);
     });
 
     test('false for a command carrying index: true', () => {
-        assert.strictEqual(isIndexArtifact(fm({ type: 'command', index: true })), false);
+        assert.strictEqual(isIndexArtifact(fm({ artifactType: 'Command', index: true })), false);
     });
 
     test('false when index is absent', () => {
-        assert.strictEqual(isIndexArtifact(fm({ type: 'template' })), false);
+        assert.strictEqual(isIndexArtifact(fm({ artifactType: 'Template' })), false);
     });
 
     test('false when index is explicitly false', () => {
-        assert.strictEqual(isIndexArtifact(fm({ type: 'template', index: false })), false);
+        assert.strictEqual(isIndexArtifact(fm({ artifactType: 'Template', index: false })), false);
     });
 });
 

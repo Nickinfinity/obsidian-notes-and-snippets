@@ -1,5 +1,5 @@
 ---
-type: template
+artifactType: Template
 title: Barrel
 extension: .ts
 ---

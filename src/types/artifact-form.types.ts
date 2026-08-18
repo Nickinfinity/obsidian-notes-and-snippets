@@ -1,5 +1,4 @@
-import type { ArtifactType } from './parsed-artifact.types.js';
-import type { ParsedVar } from './parsed-artifact.types.js';
+import type { ArtifactType, ParsedVar } from './parsed-artifact.types.js';
 
 /**
  * Controls whether the artifact create/edit form is in create or edit mode.
@@ -41,7 +40,7 @@ export interface ArtifactFormBlock {
  *
  * @example
  * {
- *   type: 'snippet',
+ *   artifactType: 'Snippet',
  *   title: 'Express Route',
  *   description: 'Basic GET handler.',
  *   tags: ['express', 'api'],
@@ -50,7 +49,7 @@ export interface ArtifactFormBlock {
  */
 export interface ArtifactFormModel {
     /** Artifact category — drives serializer language rules and destination directory. */
-    type: ArtifactType;
+    artifactType: ArtifactType;
     /** File-level title — emitted in frontmatter `title:`. */
     title: string;
     /** File-level description — emitted in frontmatter `description:`. */

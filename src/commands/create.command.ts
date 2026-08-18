@@ -61,7 +61,7 @@ interface TypePickItem extends vscode.QuickPickItem {
  * @returns Array of items, one per create-form-enabled artifact type.
  *
  * @example
- * buildTypeItems() // [{ label: '$(add) Create Snippet', detail: 'Snippets', artifactType: 'snippet' }, ...]
+ * buildTypeItems() // [{ label: '$(add) Create Snippet', detail: 'Snippets', artifactType: 'Snippet' }, ...]
  */
 function buildTypeItems(): TypePickItem[] {
     // Every type here came from getCreateFormTypes(), so getEntry cannot miss.
@@ -84,7 +84,7 @@ function buildTypeItems(): TypePickItem[] {
  * @param type    - Chosen artifact type.
  *
  * @example
- * openFormForType(context, 'snippet')
+ * openFormForType(context, 'Snippet')
  */
 function openFormForType(context: vscode.ExtensionContext, type: ArtifactType): void {
     openArtifactFormPanel(context, { mode: 'create', type });
@@ -139,7 +139,7 @@ export function registerCreateCommands(context: vscode.ExtensionContext): void {
             }
 
             const prefill = buildSnippetPrefill(selectionText, editor.document.languageId);
-            openArtifactFormPanel(context, { mode: 'create', type: 'snippet', prefill });
+            openArtifactFormPanel(context, { mode: 'create', type: 'Snippet', prefill });
         }),
 
         // ── obsidian-artifacts.create.fromSelection.command ──────────────────
@@ -171,7 +171,7 @@ export function registerCreateCommands(context: vscode.ExtensionContext): void {
             }
 
             const prefill = buildCommandPrefill(text);
-            openArtifactFormPanel(context, { mode: 'create', type: 'command', prefill });
+            openArtifactFormPanel(context, { mode: 'create', type: 'Command', prefill });
         }),
     );
 }

@@ -59,7 +59,7 @@ function mkArtifact(overrides: Partial<ParsedArtifactFile> = {}): ParsedArtifact
         filePath:     '/tmp/vault/Variables/test.md',
         fileName:     'test',
         relativePath: 'test.md',
-        frontmatter:  { type: 'variables', title: 'Test Variable Set' },
+        frontmatter:  { artifactType: 'Variables', title: 'Test Variable Set' },
         code:         '',
         vars:         [],
         blocks:       [],
@@ -118,7 +118,7 @@ suite('extractSubSets', () => {
 
     test('single-block file (blocks: []) → returns 1 sub-set with heading from frontmatter.title', () => {
         const artifact = mkArtifact({
-            frontmatter: { type: 'variables', title: 'Express API Environments' },
+            frontmatter: { artifactType: 'Variables', title: 'Express API Environments' },
             vars:        mkVars(['VK-API_URL', 'VK-DB_URL']),
             blocks:      [],
         });
@@ -131,7 +131,7 @@ suite('extractSubSets', () => {
 
     test('single-block file vars come from artifact.vars (top-level), not from blocks', () => {
         const artifact = mkArtifact({
-            frontmatter: { type: 'variables', title: 'Local' },
+            frontmatter: { artifactType: 'Variables', title: 'Local' },
             vars:        mkVars(['VK-only']),
             blocks:      [],
         });
@@ -183,7 +183,7 @@ suite('extractSubSets', () => {
 
     test('single-block sub-set carries sourceFile pointing to the original parsed file', () => {
         const artifact = mkArtifact({
-            frontmatter: { type: 'variables', title: 'My Set' },
+            frontmatter: { artifactType: 'Variables', title: 'My Set' },
             vars:        mkVars(['VK-x']),
             blocks:      [],
         });
@@ -197,7 +197,7 @@ suite('extractSubSets', () => {
         // Implementation may use frontmatter.title || fileName. We assert non-empty + stable.
         const artifact = mkArtifact({
             fileName:    'local-dev',
-            frontmatter: { type: 'variables' },
+            frontmatter: { artifactType: 'Variables' },
             vars:        mkVars(['VK-x']),
             blocks:      [],
         });
@@ -209,7 +209,7 @@ suite('extractSubSets', () => {
     test('single-block file with empty top-level vars produces no sub-sets', () => {
         // Same exclusion rule as multi-block: a sub-set with no vars is dropped.
         const artifact = mkArtifact({
-            frontmatter: { type: 'variables', title: 'Empty' },
+            frontmatter: { artifactType: 'Variables', title: 'Empty' },
             vars:        [],
             blocks:      [],
         });

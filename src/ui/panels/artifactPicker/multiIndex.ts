@@ -181,11 +181,11 @@ export class MultiIndexRunner {
         // b. A linked file that isn't a writesFile type, or fails D1, is a skip
         // with a warning — an index of templates that accidentally links a
         // snippet must not abort the rest of the scaffold.
-        if (!writesWholeFile(artifact.frontmatter.type)) {
+        if (!writesWholeFile(artifact.frontmatter.artifactType)) {
             warn(`"${step.raw}" skipped: not a template or agent config.`);
             return undefined;
         }
-        const blockCheck = validateSingleBlock(artifact, getTypeSingular(artifact.frontmatter.type));
+        const blockCheck = validateSingleBlock(artifact, getTypeSingular(artifact.frontmatter.artifactType));
         if (!blockCheck.ok) {
             warn(`"${step.raw}" skipped: ${blockCheck.reason}`);
             return undefined;

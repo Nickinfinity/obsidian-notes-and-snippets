@@ -60,7 +60,7 @@ export type TemplateBlockCheck =
  */
 export function resolveOutputFileName(artifact: ParsedArtifactFile): string {
     const fallbackBase = artifact.frontmatter.title || artifact.fileName;
-    if (artifact.frontmatter.type === 'agent') {
+    if (artifact.frontmatter.artifactType === 'AIAgentsConfig') {
         return resolveAgentFileName({ target: artifact.frontmatter.target, fallbackBase });
     }
     return resolveTemplateFileName({

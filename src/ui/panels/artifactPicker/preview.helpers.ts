@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { resolveVars } from '../../../services/parser.service.js';
-import type { ParsedArtifactFile, ParsedBlock } from '../../../types/parsed-artifact.types.js';
+import { getEntry } from '../../../services/artifact-type-config.service.js';
+import type { ArtifactContext } from '../../../types/artifact.types.js';
+import type { ArtifactType, ParsedArtifactFile, ParsedBlock } from '../../../types/parsed-artifact.types.js';
 import { styleLinkTags } from '../../../utils/html.js';
 
 /** WebviewPanel viewType used for both the read-only preview and the interactive popup. */
@@ -81,28 +83,210 @@ export function blockAsArtifact(block: ParsedBlock, parent: ParsedArtifactFile):
 }
 
 /**
- * Substitutes variables and delivers resolved content to the editor, terminal, or clipboard.
+ * Which context-menu surface an insert command was invoked from — statically
+ * known from the command id that fired (the base id vs. its `.terminal`
+ * sibling registered for both-context types), never a live focus read. See
+ * `registerInsertCommands` (`insert.command.ts`) for where this is captured.
+ */
+export type InvocationSurface = 'editor' | 'terminal';
+
+/**
+ * Where `performInsert` ultimately writes the resolved content. Shares
+ * `InvocationSurface`'s two literal values today, but is kept as a distinct
+ * type: this is the *decision* `resolveInsertTarget` produces, not the *input*
+ * fact of which menu was clicked.
+ */
+export type InsertTarget = 'terminal' | 'editor';
+
+/**
+ * True when `contexts` declares **both** `'editor'` and `'terminal'` — the one
+ * D6 row that needs to distinguish which menu invoked it. The single
+ * authority both `resolveInsertTarget` and `needsTerminalConfirmation` key
+ * off, so the insert-target decision and the terminal-confirm decision can
+ * never disagree about which types this applies to.
  *
- * For `type: command` artifacts the resolved text is sent to the active terminal (created
- * if absent). For all other types the text is inserted at the cursor; if no editor is open
- * it falls back to the clipboard with an informational message.
+ * @param contexts - An artifact's declared `contexts` field.
+ * @returns Whether both surfaces are declared.
+ * @example hasBothContexts(['editor', 'terminal']) // → true
+ */
+function hasBothContexts(contexts: readonly ArtifactContext[]): boolean {
+    return contexts.includes('editor') && contexts.includes('terminal');
+}
+
+/**
+ * Decides which surface an artifact's resolved content should land on.
  *
- * @param editor   - Active text editor to insert into, or `undefined` when none is open.
- * @param artifact - Artifact supplying the code template and type.
- * @param vars     - Resolved `{ name → value }` map from the edit panel or input box.
+ * Reads the type's declared `contexts` via `getEntry` — never a
+ * `artifactType === 'X'` literal — and applies D6's three-row table:
+ *  1. `contexts` is exactly `['terminal']` → always `'terminal'`.
+ *  2. `contexts` contains **both** `'editor'` and `'terminal'` → the
+ *     invocation surface decides, verbatim.
+ *  3. Anything else (including `['all']`, e.g. `Variables`) → always
+ *     `'editor'`. This row never routes to the terminal, regardless of
+ *     `invocationSurface`. `performInsert` falls back to the clipboard when
+ *     no editor is actually available — that is a runtime-availability
+ *     concern this pure resolver has no way to know.
+ *
+ * @param type              - Canonical `ArtifactType` literal (looked up via `getEntry`).
+ * @param invocationSurface - Which menu the command was invoked from; see {@link InvocationSurface}.
+ * @returns The surface `performInsert` should write to.
  *
  * @example
- * performInsert(vscode.window.activeTextEditor, artifact, { 'VK-host': 'localhost' });
+ * resolveInsertTarget('Command', 'editor');    // → 'terminal' (contexts: ['terminal'])
+ * resolveInsertTarget('Variables', 'terminal'); // → 'editor'   (contexts: ['all'], never terminal)
+ * resolveInsertTarget('AIPrompt', 'terminal');  // → 'terminal' (contexts: ['editor', 'terminal'])
  */
-export function performInsert(
+export function resolveInsertTarget(type: ArtifactType, invocationSurface: InvocationSurface): InsertTarget {
+    const { contexts } = getEntry(type);
+
+    if (contexts.length === 1 && contexts[0] === 'terminal') {
+        return 'terminal';
+    }
+    if (hasBothContexts(contexts)) {
+        return invocationSurface;
+    }
+    return 'editor';
+}
+
+/** Bracketed-paste start marker — tells the receiving program "literal text follows". */
+const BRACKETED_PASTE_START = '\x1b[200~';
+/** Bracketed-paste end marker. */
+const BRACKETED_PASTE_END = '\x1b[201~';
+
+/**
+ * Wraps terminal-bound content in bracketed-paste markers so a multi-line
+ * payload arrives as **one block of text** instead of as keystrokes that
+ * submit themselves line by line.
+ *
+ * `terminal.sendText(content, false)` suppresses only the *trailing* newline.
+ * Every newline *inside* the payload still reaches the shell as if the user
+ * pressed Enter there — correct for a `Command` (running it is the point),
+ * wrong for an `AIPrompt`, whose payload is multi-line markdown by design and
+ * is meant to land in a CLI agent's input the way Shift+Enter does.
+ *
+ * Bracketed paste is the mechanism a real terminal paste uses: the receiving
+ * program sees `ESC[200~ … ESC[201~` and treats everything between as literal
+ * text, so the newlines become part of the input rather than executing it.
+ * Nothing runs until the user presses Enter themselves.
+ *
+ * Scoped to both-context types, so the pre-existing `Command` path
+ * (`contexts: ['terminal']` only) is byte-identical, and skipped for
+ * single-line content, which has nothing to protect.
+ *
+ * ponytail: assumes the receiving program has bracketed paste enabled — true
+ * for bash 4.4+, zsh, fish and the CLI agents this targets. A shell with it
+ * disabled would show the markers literally and still run each line, and
+ * support cannot be detected from the extension host, which is why
+ * {@link needsTerminalConfirmation} still fires.
+ *
+ * @param type    - Canonical `ArtifactType` literal (looked up via `getEntry`).
+ * @param content - The fully variable-resolved text about to be sent.
+ * @returns The exact string to hand to `terminal.sendText`.
+ *
+ * @example
+ * wrapForTerminal('AIPrompt', 'a\nb'); // → '\x1b[200~a\nb\x1b[201~'
+ * wrapForTerminal('Command', 'a\nb');  // → 'a\nb' (unchanged — meant to run)
+ * wrapForTerminal('AIPrompt', 'one');   // → 'one' (single line, nothing to protect)
+ */
+export function wrapForTerminal(type: ArtifactType, content: string): string {
+    if (!content.includes('\n') || !hasBothContexts(getEntry(type).contexts)) {
+        return content;
+    }
+    return `${BRACKETED_PASTE_START}${content}${BRACKETED_PASTE_END}`;
+}
+
+/**
+ * Whether `performInsert` should confirm before sending `content` to the
+ * terminal.
+ *
+ * Vault content is untrusted. {@link wrapForTerminal} stops a multi-line
+ * payload from submitting itself, but bracketed-paste support cannot be
+ * detected from the extension host, so a shell with it disabled would still
+ * act on each newline. This confirmation is the backstop for that case.
+ *
+ * Scoped so the pre-existing `Command` path (`contexts: ['terminal']` only) is
+ * byte-identical — it never confirms.
+ *
+ * @param type    - Canonical `ArtifactType` literal (looked up via `getEntry`).
+ * @param content - The fully variable-resolved text about to be sent.
+ * @returns `true` when the confirmation modal should fire.
+ *
+ * @example
+ * needsTerminalConfirmation('AIPrompt', 'line one\nline two'); // → true
+ * needsTerminalConfirmation('Command', 'line one\nline two');  // → false (['terminal']-only, unchanged)
+ */
+export function needsTerminalConfirmation(type: ArtifactType, content: string): boolean {
+    return content.includes('\n') && hasBothContexts(getEntry(type).contexts);
+}
+
+/** Longest single preview line shown in the terminal-confirm modal before truncation. */
+const CONFIRM_PREVIEW_LINE_MAX = 200;
+/** Longest run of leading lines shown in the terminal-confirm modal's preview. */
+const CONFIRM_PREVIEW_LINE_COUNT = 3;
+
+/**
+ * Builds the modal `detail` text for the terminal-send confirmation: line
+ * count, what is about to happen, and a short truncated preview so the user
+ * can recognise the payload.
+ *
+ * @param content - The fully variable-resolved text about to be sent.
+ * @returns The `detail` string for `vscode.window.showWarningMessage`.
+ * @example terminalConfirmDetail('echo hi\nrm -rf /'); // → '2 lines will be pasted…'
+ */
+function terminalConfirmDetail(content: string): string {
+    const lines = content.split('\n');
+    const clamp = (line: string): string =>
+        line.length > CONFIRM_PREVIEW_LINE_MAX ? `${line.slice(0, CONFIRM_PREVIEW_LINE_MAX)}…` : line;
+    const preview = lines.slice(0, CONFIRM_PREVIEW_LINE_COUNT).map(clamp).join('\n')
+        + (lines.length > CONFIRM_PREVIEW_LINE_COUNT ? '\n…' : '');
+
+    return `${lines.length} lines will be pasted into the terminal as one block, without pressing Enter. `
+        + 'If the receiving shell does not support bracketed paste, each line could run on its own.'
+        + `\n\n${preview}`;
+}
+
+/**
+ * Substitutes variables and delivers resolved content to the editor, terminal, or clipboard.
+ *
+ * The target surface is decided by {@link resolveInsertTarget} from the artifact's
+ * declared `contexts` plus the invocation surface — never an
+ * `artifactType === 'Command'` literal here. A `'terminal'` target always
+ * writes (creating a terminal if none exists). A multi-line payload goes
+ * through {@link wrapForTerminal} so it pastes as one block instead of
+ * submitting itself line by line, and {@link needsTerminalConfirmation}
+ * gates it behind a modal first — vault content is untrusted and
+ * bracketed-paste support cannot be detected. Cancelling (or dismissing) the
+ * modal sends nothing. An `'editor'` target falls back to the clipboard when
+ * `editor` is `undefined`.
+ *
+ * @param editor            - Active text editor to insert into, or `undefined` when none is open.
+ * @param artifact          - Artifact supplying the code template and type.
+ * @param vars              - Resolved `{ name → value }` map from the edit panel or input box.
+ * @param invocationSurface - Which menu the insert command was invoked from; see {@link InvocationSurface}.
+ *
+ * @example
+ * await performInsert(vscode.window.activeTextEditor, artifact, { 'VK-host': 'localhost' }, 'editor');
+ */
+export async function performInsert(
     editor: vscode.TextEditor | undefined,
     artifact: ParsedArtifactFile,
-    vars: Record<string, string>
-): void {
+    vars: Record<string, string>,
+    invocationSurface: InvocationSurface
+): Promise<void> {
     const content = resolveVars(artifact.code, vars);
-    if (artifact.frontmatter.type === 'command') {
+    const target = resolveInsertTarget(artifact.frontmatter.artifactType, invocationSurface);
+
+    if (target === 'terminal') {
+        if (needsTerminalConfirmation(artifact.frontmatter.artifactType, content)) {
+            const choice = await vscode.window.showWarningMessage(
+                'Send multi-line content to the terminal?',
+                { modal: true, detail: terminalConfirmDetail(content) },
+                'Send',
+            );
+            if (choice !== 'Send') { return; }
+        }
         const terminal = vscode.window.activeTerminal ?? vscode.window.createTerminal('Obsidian Artifacts');
-        terminal.sendText(content, false);
+        terminal.sendText(wrapForTerminal(artifact.frontmatter.artifactType, content), false);
         terminal.show(true);
         return;
     }
@@ -110,6 +294,9 @@ export function performInsert(
         editor.edit(edit => edit.insert(editor.selection.active, content));
         return;
     }
-    vscode.env.clipboard.writeText(content);
+    // Await rather than fire-and-forget: the toast must not claim a copy that
+    // failed (the clipboard is unavailable on some remote hosts), and this
+    // function is already async for the terminal confirmation.
+    await vscode.env.clipboard.writeText(content);
     vscode.window.showInformationMessage('Obsidian Artifacts: No active editor — content copied to clipboard.');
 }

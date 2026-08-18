@@ -48,7 +48,7 @@ suite('fixtures smoke — snippet-minimal.md', () => {
     });
 
     test('type is snippet', () => {
-        assert.strictEqual(load('snippet-minimal.md').frontmatter.type, 'snippet');
+        assert.strictEqual(load('snippet-minimal.md').frontmatter.artifactType, 'Snippet');
     });
 
     test('language is javascript', () => {
@@ -95,14 +95,14 @@ suite('fixtures smoke — snippet-plain-text.md', () => {
     });
 
     test('type is snippet', () => {
-        assert.strictEqual(load('snippet-plain-text.md').frontmatter.type, 'snippet');
+        assert.strictEqual(load('snippet-plain-text.md').frontmatter.artifactType, 'Snippet');
     });
 });
 
 suite('fixtures smoke — command-with-defaults.md', () => {
 
     test('type is command', () => {
-        assert.strictEqual(load('command-with-defaults.md').frontmatter.type, 'command');
+        assert.strictEqual(load('command-with-defaults.md').frontmatter.artifactType, 'Command');
     });
 
     test('language is undefined (bare fence, no language key)', () => {

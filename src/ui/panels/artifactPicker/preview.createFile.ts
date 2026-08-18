@@ -1,6 +1,6 @@
 /**
- * Create File flow for whole-file artifact types (`type: template` / `type: agent`,
- * `ARTIFACTS.writesFile`): enforce the single-block guard (D1), resolve the
+ * Create File flow for whole-file artifact types (`artifactType: Template` /
+ * `artifactType: AIAgentsConfig`, `ARTIFACTS.writesFile`): enforce the single-block guard (D1), resolve the
  * destination and filename, substitute variables, write into the workspace, then
  * (optionally) open the new file.
  *
@@ -78,7 +78,7 @@ export interface RunCreateFileFlowArgs {
  */
 export async function runCreateFileFlow(args: RunCreateFileFlowArgs): Promise<CreateFileResult> {
     const { artifact, code, vars, destUri, openAfterWrite } = args;
-    const type = artifact.frontmatter.type;
+    const type = artifact.frontmatter.artifactType;
 
     // ── D1: single-block only (template) / one config file (agent) ────────
     const blockCheck = validateSingleBlock(artifact, getTypeSingular(type));
