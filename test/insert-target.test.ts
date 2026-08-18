@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
 import * as vscode from 'vscode';
-import { resolveInsertTarget, needsTerminalConfirmation } from '../src/ui/panels/artifactPicker/preview.helpers.js';
+import { resolveInsertTarget, needsTerminalConfirmation, wrapForTerminal } from '../src/ui/panels/artifactPicker/preview.helpers.js';
 import { ARTIFACTS } from '../src/types/constants.js';
 import { artifactTerminalCommandId } from '../src/commands/insert.command.js';
 
@@ -104,5 +104,48 @@ suite('registerInsertCommands — .terminal registration (T3)', () => {
                 `${terminalId} is not registered — registerInsertCommands must register a .terminal id for both-context artifacts`,
             );
         }
+    });
+});
+
+/**
+ * A prompt sent to the terminal must arrive as **one block of text**, the way
+ * Shift+Enter behaves in a CLI agent's input — not as keystrokes that submit
+ * themselves at every newline.
+ *
+ * `sendText(content, false)` only suppresses the *trailing* newline, so the
+ * payload is wrapped in bracketed-paste markers instead. A `Command` is
+ * deliberately excluded: running it line by line is the entire point, and that
+ * path must stay byte-identical.
+ */
+suite('wrapForTerminal — multi-line prompts paste as one block', () => {
+
+    const START = '\x1b[200~';
+    const END = '\x1b[201~';
+
+    test('a multi-line AIPrompt is wrapped in bracketed-paste markers', () => {
+        assert.strictEqual(wrapForTerminal('AIPrompt', 'line one\nline two'), `${START}line one\nline two${END}`);
+    });
+
+    test('the payload survives byte-identically between the markers', () => {
+        const payload = 'Review the repo.\n\n```bash\nnpm test\n```\n\nReport findings.';
+        const wrapped = wrapForTerminal('AIPrompt', payload);
+        assert.strictEqual(wrapped.slice(START.length, -END.length), payload);
+    });
+
+    test('a single-line AIPrompt is left alone — nothing to protect', () => {
+        assert.strictEqual(wrapForTerminal('AIPrompt', 'just one line'), 'just one line');
+    });
+
+    // The regression guard: a Command is meant to execute line by line.
+    test('a multi-line Command is NOT wrapped', () => {
+        assert.strictEqual(wrapForTerminal('Command', 'echo one\necho two'), 'echo one\necho two');
+    });
+
+    test('a multi-line Snippet is NOT wrapped', () => {
+        assert.strictEqual(wrapForTerminal('Snippet', 'a\nb'), 'a\nb');
+    });
+
+    test('no stray newline is appended — Enter stays the user\'s to press', () => {
+        assert.ok(!wrapForTerminal('AIPrompt', 'a\nb').endsWith('\n'));
     });
 });

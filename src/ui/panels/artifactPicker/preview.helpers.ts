@@ -148,18 +148,64 @@ export function resolveInsertTarget(type: ArtifactType, invocationSurface: Invoc
     return 'editor';
 }
 
+/** Bracketed-paste start marker — tells the receiving program "literal text follows". */
+const BRACKETED_PASTE_START = '\x1b[200~';
+/** Bracketed-paste end marker. */
+const BRACKETED_PASTE_END = '\x1b[201~';
+
+/**
+ * Wraps terminal-bound content in bracketed-paste markers so a multi-line
+ * payload arrives as **one block of text** instead of as keystrokes that
+ * submit themselves line by line.
+ *
+ * `terminal.sendText(content, false)` suppresses only the *trailing* newline.
+ * Every newline *inside* the payload still reaches the shell as if the user
+ * pressed Enter there — correct for a `Command` (running it is the point),
+ * wrong for an `AIPrompt`, whose payload is multi-line markdown by design and
+ * is meant to land in a CLI agent's input the way Shift+Enter does.
+ *
+ * Bracketed paste is the mechanism a real terminal paste uses: the receiving
+ * program sees `ESC[200~ … ESC[201~` and treats everything between as literal
+ * text, so the newlines become part of the input rather than executing it.
+ * Nothing runs until the user presses Enter themselves.
+ *
+ * Scoped to both-context types, so the pre-existing `Command` path
+ * (`contexts: ['terminal']` only) is byte-identical, and skipped for
+ * single-line content, which has nothing to protect.
+ *
+ * ponytail: assumes the receiving program has bracketed paste enabled — true
+ * for bash 4.4+, zsh, fish and the CLI agents this targets. A shell with it
+ * disabled would show the markers literally and still run each line, and
+ * support cannot be detected from the extension host, which is why
+ * {@link needsTerminalConfirmation} still fires.
+ *
+ * @param type    - Canonical `ArtifactType` literal (looked up via `getEntry`).
+ * @param content - The fully variable-resolved text about to be sent.
+ * @returns The exact string to hand to `terminal.sendText`.
+ *
+ * @example
+ * wrapForTerminal('AIPrompt', 'a\nb'); // → '\x1b[200~a\nb\x1b[201~'
+ * wrapForTerminal('Command', 'a\nb');  // → 'a\nb' (unchanged — meant to run)
+ * wrapForTerminal('AIPrompt', 'one');   // → 'one' (single line, nothing to protect)
+ */
+export function wrapForTerminal(type: ArtifactType, content: string): string {
+    if (!content.includes('\n') || !hasBothContexts(getEntry(type).contexts)) {
+        return content;
+    }
+    return `${BRACKETED_PASTE_START}${content}${BRACKETED_PASTE_END}`;
+}
+
 /**
  * Whether `performInsert` should confirm before sending `content` to the
- * terminal. `terminal.sendText` executes every internal newline as if typed —
- * harmless for `Command` (its whole point is to run), but a hazard for a
- * both-context type like `AIPrompt`: flagged markdown sourced from untrusted
- * vault content, which routinely contains a fenced `bash` block that would
- * then run verbatim. Scoped so the pre-existing `Command` path
- * (`contexts: ['terminal']` only) is byte-identical — it never confirms.
+ * terminal.
  *
- * Callers gate this on `resolveInsertTarget` already having chosen
- * `'terminal'`; this predicate only needs to tell the two terminal-reaching
- * rows apart.
+ * Vault content is untrusted. {@link wrapForTerminal} stops a multi-line
+ * payload from submitting itself, but bracketed-paste support cannot be
+ * detected from the extension host, so a shell with it disabled would still
+ * act on each newline. This confirmation is the backstop for that case.
+ *
+ * Scoped so the pre-existing `Command` path (`contexts: ['terminal']` only) is
+ * byte-identical — it never confirms.
  *
  * @param type    - Canonical `ArtifactType` literal (looked up via `getEntry`).
  * @param content - The fully variable-resolved text about to be sent.
@@ -180,12 +226,12 @@ const CONFIRM_PREVIEW_LINE_COUNT = 3;
 
 /**
  * Builds the modal `detail` text for the terminal-send confirmation: line
- * count, a plain statement of what `sendText` does, and a short, truncated
- * preview of `content` so the user can recognise what they are about to run.
+ * count, what is about to happen, and a short truncated preview so the user
+ * can recognise the payload.
  *
  * @param content - The fully variable-resolved text about to be sent.
  * @returns The `detail` string for `vscode.window.showWarningMessage`.
- * @example terminalConfirmDetail('echo hi\nrm -rf /'); // → '2 lines will be sent…\n\necho hi\nrm -rf /'
+ * @example terminalConfirmDetail('echo hi\nrm -rf /'); // → '2 lines will be pasted…'
  */
 function terminalConfirmDetail(content: string): string {
     const lines = content.split('\n');
@@ -194,7 +240,9 @@ function terminalConfirmDetail(content: string): string {
     const preview = lines.slice(0, CONFIRM_PREVIEW_LINE_COUNT).map(clamp).join('\n')
         + (lines.length > CONFIRM_PREVIEW_LINE_COUNT ? '\n…' : '');
 
-    return `${lines.length} lines will be sent to the terminal as if typed, and the shell will act on each one.\n\n${preview}`;
+    return `${lines.length} lines will be pasted into the terminal as one block, without pressing Enter. `
+        + 'If the receiving shell does not support bracketed paste, each line could run on its own.'
+        + `\n\n${preview}`;
 }
 
 /**
@@ -203,11 +251,13 @@ function terminalConfirmDetail(content: string): string {
  * The target surface is decided by {@link resolveInsertTarget} from the artifact's
  * declared `contexts` plus the invocation surface — never an
  * `artifactType === 'Command'` literal here. A `'terminal'` target always
- * writes (creating a terminal if none exists), but first confirms via a modal
- * when {@link needsTerminalConfirmation} says so — vault content is untrusted,
- * and `sendText` runs every internal newline as if typed. Cancelling (or
- * dismissing) the modal sends nothing. An `'editor'` target falls back to the
- * clipboard when `editor` is `undefined`.
+ * writes (creating a terminal if none exists). A multi-line payload goes
+ * through {@link wrapForTerminal} so it pastes as one block instead of
+ * submitting itself line by line, and {@link needsTerminalConfirmation}
+ * gates it behind a modal first — vault content is untrusted and
+ * bracketed-paste support cannot be detected. Cancelling (or dismissing) the
+ * modal sends nothing. An `'editor'` target falls back to the clipboard when
+ * `editor` is `undefined`.
  *
  * @param editor            - Active text editor to insert into, or `undefined` when none is open.
  * @param artifact          - Artifact supplying the code template and type.
@@ -236,7 +286,7 @@ export async function performInsert(
             if (choice !== 'Send') { return; }
         }
         const terminal = vscode.window.activeTerminal ?? vscode.window.createTerminal('Obsidian Artifacts');
-        terminal.sendText(content, false);
+        terminal.sendText(wrapForTerminal(artifact.frontmatter.artifactType, content), false);
         terminal.show(true);
         return;
     }

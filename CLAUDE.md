@@ -305,19 +305,33 @@ correct, no live state to read. `resolveInsertTarget(type, invocationSurface)`
 contexts declared resolves to whichever surface invoked it; anything else
 (including `Variables`'s `['all']`) always resolves `'editor'`.
 
-**🔒 Terminal-send confirmation.** `terminal.sendText(content, false)`
-suppresses only the *trailing* newline — every embedded newline reaches the
-shell as if the user pressed Enter after that line. Harmless for `Command`
-(running it is the whole point), but a hazard for `AIPrompt`: multi-line
-flagged markdown from the vault — untrusted content by this codebase's
-standing rule — routinely contains a fenced ` ```bash ` block that would then
-execute verbatim. `performInsert` calls `needsTerminalConfirmation(type,
-content)` before sending; it is `true` only when the target is `'terminal'`
-**and** the content has more than one line **and** the type declares both
-contexts — so the pre-existing `contexts: ['terminal']`-only path (`Command`)
-never prompts, byte-identical to before. A `true` result opens a modal listing
-the line count and a truncated preview before `sendText` runs; Cancel or
-Escape sends nothing.
+**🔒 Terminal send — one paste, not a line of keystrokes.**
+`terminal.sendText(content, false)` suppresses only the *trailing* newline;
+every embedded newline still reaches the shell as if the user pressed Enter
+after that line. That is correct for `Command` — running it is the whole point
+— and wrong for `AIPrompt`, whose payload is multi-line flagged markdown by
+design, comes from the vault (untrusted by this codebase's standing rule), and
+routinely carries a fenced ` ```bash ` block that would otherwise execute
+verbatim.
+
+`wrapForTerminal(type, content)` (`artifactPicker/preview.helpers.ts`) wraps a
+multi-line payload in **bracketed-paste markers** (`ESC[200~` … `ESC[201~`) —
+the same mechanism a real terminal paste uses. The receiving program treats
+everything between them as literal text, so the newlines become part of the
+input instead of submitting it: the prompt lands as one block, the way
+Shift+Enter behaves in a CLI agent, and nothing runs until the user presses
+Enter. No trailing newline is added. Wrapping is skipped for single-line
+content and for any type not declaring **both** contexts, so `Command` is
+byte-identical to before — pinned by a test, because "a `Command` still
+executes line by line" is exactly what a well-meaning refactor would break.
+
+Support cannot be detected from the extension host (a shell with bracketed
+paste disabled would show the markers literally and still act on each line), so
+the confirmation stays as the backstop: `needsTerminalConfirmation(type,
+content)` is `true` only when the target is `'terminal'` **and** the content is
+multi-line **and** the type declares both contexts — so `Command` never
+prompts. A `true` result opens a modal with the line count and a truncated
+preview; Cancel or Escape sends nothing.
 
 ### Vault directory logic (`constants.ts` + `vault.service.ts`)
 
