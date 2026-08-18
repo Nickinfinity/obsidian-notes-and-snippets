@@ -1,5 +1,5 @@
 ---
-type: variables
+artifactType: Variables
 title: Local Dev
 ---
 

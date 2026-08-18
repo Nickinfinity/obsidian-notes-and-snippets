@@ -1,5 +1,5 @@
 ---
-type: snippet
+artifactType: Snippet
 title: API URLs
 description: Development and production API base URLs.
 tags: [api, urls]

@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { parseFromContent } from '../../../services/parser.service.js';
 import type { BlockRef } from '../../../services/artifact-patcher.service.js';
@@ -5,7 +6,13 @@ import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js
 import { out } from './shared.js';
 import { ArtifactItem, buildItem, PREVIEW_DEBOUNCE_MS } from './navigator.helpers.js';
 import { PreviewPanelController, blockAsArtifact } from './preview.js';
+import type { InvocationSurface } from './preview.helpers.js';
 import { getVaultRootUri } from '../../../services/config.service.js';
+import { forcesSingleBlock } from '../../../services/artifact-type-config.service.js';
+import { isIndexArtifact } from '../../../services/multi-index.service.js';
+import { resolveDestination } from '../../../services/template-destination.service.js';
+import { MultiIndexRunner } from './multiIndex.js';
+import { chooseStepDestination } from './multiIndex.dest.js';
 
 /**
  * Opens a QuickPick navigator for the given vault artifact directory.
@@ -20,15 +27,25 @@ import { getVaultRootUri } from '../../../services/config.service.js';
  * @param extensionUri - Extension URI used to resolve the shared CSS stylesheet.
  * @param storageUri   - Extension storage dir for block-edit temp files
  *                       (`context.storageUri ?? context.globalStorageUri`).
+ * @param destUri      - The Explorer URI a Template was invoked on (folder or file),
+ *                       forwarded to the Create File flow (D2). `undefined` for every
+ *                       non-template invocation; the picker behaves exactly as before.
+ * @param surface      - Which context-menu surface the command was invoked from (T3),
+ *                       forwarded to `performInsert` for both-context types (`AIPrompt`).
+ *                       `registerInsertCommands` passes this explicitly for every
+ *                       registration — no default here, so a missing argument is a
+ *                       compile error rather than a silent editor insert.
  *
  * @example
- * await openArtifactPicker('Snippets', 'Snippets', context.extensionUri, storageUri);
+ * await openArtifactPicker('Templates', 'Templates', context.extensionUri, storageUri, clickedUri, 'editor');
  */
 export async function openArtifactPicker(
     artifactDir: string,
     artifactName: string,
     extensionUri: vscode.Uri,
     storageUri: vscode.Uri,
+    destUri: vscode.Uri | undefined,
+    surface: InvocationSurface,
 ): Promise<void> {
     const vaultRoot = getVaultRootUri();
 
@@ -48,7 +65,7 @@ export async function openArtifactPicker(
     }
 
     const targetEditor = vscode.window.activeTextEditor;
-    await new ArtifactNavigator(rootUri, artifactName, targetEditor, extensionUri, storageUri).run();
+    await new ArtifactNavigator(rootUri, artifactName, targetEditor, extensionUri, storageUri, destUri, surface).run();
 }
 
 // ── ArtifactNavigator ─────────────────────────────────────────────────────────
@@ -77,6 +94,8 @@ class ArtifactNavigator {
         targetEditor: vscode.TextEditor | undefined,
         extensionUri: vscode.Uri,
         storageUri: vscode.Uri,
+        private readonly destUri: vscode.Uri | undefined,
+        private readonly invocationSurface: InvocationSurface,
     ) {
         this.rootUri      = rootUri;
         this.currentDir   = rootUri;
@@ -97,6 +116,8 @@ class ArtifactNavigator {
             onDispose:    () => { /* preview self-cleans; navigator has no extra work */ },
             closePicker:  () => this.qp.hide(),
             storageUri,
+            destUri,
+            invocationSurface: this.invocationSurface,
         });
     }
 
@@ -246,11 +267,33 @@ class ArtifactNavigator {
         if (key === this.lastPreviewedUri) { return; }
         this.lastPreviewedUri = key;
 
-        if (artifact.blocks.length > 1) {
+        if (this.isMultiBlockNav(artifact)) {
             this.preview.showMultiBlockPreview(artifact);
             return;
         }
         this.preview.showPreview(artifact);
+    }
+
+    /**
+     * Whether an artifact should be browsed as a multi-block file.
+     *
+     * A template is single-block by contract (D1); a malformed 2+ block template
+     * is deliberately routed to the single preview so the Create File handler
+     * surfaces the D1 error, rather than letting the user drill into its blocks.
+     *
+     * Which types those are is **not** re-stated here — `forcesSingleBlock`
+     * derives it from the same `ARTIFACTS.form.multiBlock` flag the create form
+     * reads, so agent (multi-block) and template (single) can never disagree
+     * between the form and the picker.
+     *
+     * @param artifact - The parsed artifact under consideration.
+     * @returns `true` when it has 2+ blocks and its type allows multiple.
+     *
+     * @example
+     * this.isMultiBlockNav(artifact) ? showMultiBlockPreview(artifact) : showPreview(artifact)
+     */
+    private isMultiBlockNav(artifact: ParsedArtifactFile): boolean {
+        return artifact.blocks.length > 1 && !forcesSingleBlock(artifact.frontmatter.artifactType);
     }
 
     // ── Parsing & cache ───────────────────────────────────────────────────────
@@ -315,12 +358,37 @@ class ArtifactNavigator {
             return;
         }
 
-        if (artifact.blocks.length > 1) {
+        if (isIndexArtifact(artifact.frontmatter)) { await this.runIndex(artifact); return; }
+
+        if (this.isMultiBlockNav(artifact)) {
             this.loadBlocks(artifact);
             return;
         }
 
         this.handoffToPreview(artifact);
+    }
+
+    /**
+     * Runs a template index (F7): resolves the destination (D2), hides the QuickPick before the run starts (F6), hands off to `MultiIndexRunner`.
+     * @param artifact - Parsed index file.
+     * @returns Resolves once the run (or an early guard) finishes.
+     * @example await this.runIndex(indexArtifact);
+     */
+    private async runIndex(artifact: ParsedArtifactFile): Promise<void> {
+        if (!vscode.workspace.workspaceFolders?.length) { vscode.window.showErrorMessage('Obsidian Artifacts: Open a workspace folder to run a template index.'); return; }
+        const destDir = await resolveDestination(this.destUri);
+        if (!destDir) { return; }
+        const workspaceRoot = vscode.workspace.getWorkspaceFolder(destDir)?.uri;
+        if (!workspaceRoot) { vscode.window.showErrorMessage('Obsidian Artifacts: Destination is not inside an open workspace folder.'); return; }
+        this.keepPopupOnHide = true; this.qp.hide();
+        const clickedRelPath = destDir.fsPath === workspaceRoot.fsPath ? '' : path.relative(workspaceRoot.fsPath, destDir.fsPath).replaceAll(path.sep, '/');
+        const runner = new MultiIndexRunner({
+            indexDirUri: vscode.Uri.joinPath(vscode.Uri.file(artifact.filePath), '..'),
+            workspaceRoot, clickedRelPath, vaultRootFs: this.rootUri.fsPath,
+            chooseDestination: (step, candidates) => chooseStepDestination({ workspaceRoot, candidates, targetName: path.posix.basename(step.relPath) }),
+            previewStep: (a, d) => this.preview.previewOnce(a, d), closePicker: () => this.qp.hide(), disposePreview: () => this.preview.dispose(),
+        });
+        await runner.run(artifact);
     }
 
     /** Hide QP, render artifact in interactive preview, focus the panel. */

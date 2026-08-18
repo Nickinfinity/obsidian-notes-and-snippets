@@ -1,19 +1,19 @@
 /**
  * All recognised artifact categories in the Obsidian vault.
- * Must match the `type` field written in a file's YAML frontmatter.
+ * Must match the `artifactType` field written in a file's YAML frontmatter.
  */
-export type ArtifactType = 'snippet' | 'template' | 'command' | 'agent' | 'variables';
+export type ArtifactType = 'Snippet' | 'AIAgentsConfig' | 'Command' | 'Template' | 'Variables' | 'AIPrompt';
 
 /**
  * Structured representation of a vault file's YAML frontmatter block.
  *
- * All fields except `type` are optional — the parser falls back to safe defaults
- * when a field is absent or unrecognised.
+ * All fields except `artifactType` are optional — the parser falls back to safe
+ * defaults when a field is absent or unrecognised.
  *
  * Frontmatter format in the vault file:
  * ```md
  * ---
- * type: snippet
+ * artifactType: Snippet
  * title: Express Route
  * description: Basic route handler
  * language: javascript
@@ -23,7 +23,7 @@ export type ArtifactType = 'snippet' | 'template' | 'command' | 'agent' | 'varia
  */
 export interface ParsedFrontmatter {
     /** Artifact category — drives insert behaviour and the type badge colour in the picker. */
-    type: ArtifactType;
+    artifactType: ArtifactType;
     /** Human-readable title shown in the picker header; falls back to the file name. */
     title?: string;
     /** Short description rendered below the title in the picker preview. */
@@ -32,10 +32,41 @@ export interface ParsedFrontmatter {
     language?: string;
     /** Tag list parsed from `tags: [a, b, c]` frontmatter syntax. */
     tags?: string[];
-    /** Deployment environment label — used only for `type: variables` files (e.g. `dev`, `prod`). */
+    /** Deployment environment label — used only for `artifactType: Variables` files (e.g. `dev`, `prod`). */
     env?: string;
-    /** Destination file for agent configs — used only for `type: agent` files (e.g. `CLAUDE.md`). */
+    /** Destination file for agent configs — used only for `artifactType: AIAgentsConfig` files (e.g. `CLAUDE.md`). */
     target?: string;
+    /**
+     * File extension for the written file — **`artifactType: Template` only**. Overrides the
+     * fence language when resolving the output filename (D3 precedence:
+     * user-typed → this key → fence language). Accepted with or without the leading
+     * dot; a value carrying a path separator is rejected, never sanitised.
+     */
+    extension?: string;
+    /** AI provider that authored/owns this config — **`artifactType: AIAgentsConfig` only** (e.g. `Claude`). */
+    provider?: string;
+    /** Model family for the agent config — **`artifactType: AIAgentsConfig` only** (e.g. `Opus`). */
+    model?: string;
+    /** Model version string — **`artifactType: AIAgentsConfig` only** (e.g. `4.8`). */
+    version?: string;
+    /**
+     * Marks the file as a **template index** — valid only on the whole-file types
+     * (`template` / `agent`), since a run can only write files. Its body lists
+     * links to sibling artifacts that one run scaffolds.
+     *
+     * **Read-side only:** the parser reads it, `serializeArtifact` never emits it
+     * (the create form does not author indexes). Bound by the guard in
+     * `test/frontmatter-keys.test.ts`.
+     */
+    index?: boolean;
+    /**
+     * Candidate destination folders offered for **every** link in an index,
+     * parsed from `paths: [src/components, packages/ui/src]`. Workspace-folder-
+     * relative and file-level; each entry is a suggestion the user may ignore.
+     *
+     * **Read-side only**, exactly as `index` above.
+     */
+    paths?: string[];
 }
 
 /**
@@ -102,7 +133,7 @@ export interface ParsedBlock {
  *   filePath:     '/vault/Snippets/express-route.md',
  *   fileName:     'express-route',
  *   relativePath: 'express-route.md',
- *   frontmatter:  { type: 'snippet', title: 'Express Route', language: 'javascript' },
+ *   frontmatter:  { artifactType: 'Snippet', title: 'Express Route', language: 'javascript' },
  *   code:         'app.get("/{{route}}", (req, res) => { ... })',
  *   vars:         [{ name: 'route', defaultValue: '/test' }],
  * }

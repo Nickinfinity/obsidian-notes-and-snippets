@@ -1,5 +1,5 @@
 ---
-type: command
+artifactType: Command
 title: Deploy Command
 description: Deploy to a named environment and region.
 tags: [deploy]

@@ -20,7 +20,7 @@ import type { ArtifactsArray } from './artifact.types.js';
  */
 export const ARTIFACTS: ArtifactsArray = [
 	{
-		type: 'snippet',
+		type: 'Snippet',
 		name: 'Snippets',
 		dir: 'Snippets',
 		default: true,
@@ -33,14 +33,26 @@ export const ARTIFACTS: ArtifactsArray = [
 		},
 	},
 	{
-		type: 'agent',
-		name: 'Agents Config',
-		dir: 'AgentsConf',
+		type: 'AIAgentsConfig',
+		name: 'AI Agents Config',
+		dir: 'AIAgentsConf',
 		default: true,
 		contexts: ['explorer'],
+		createForm: true,
+		// Invoking an agent config writes the whole file (named from `target:`),
+		// exactly like a template — same flag, one shared code path.
+		writesFile: true,
+		// D4: agent reuses the multi-block form machinery (matches ARTIFACT_FILE_FORMAT.md §5).
+		// `free` language mirrors snippet/template; provider/model/version are agent-only
+		// frontmatter keys rendered by buildAgentFieldsSection, not a language concern.
+		form: {
+			language: { mode: 'free', default: '' },
+			label: { singular: 'agent config' },
+			multiBlock: true,
+		},
 	},
 	{
-		type: 'command',
+		type: 'Command',
 		name: 'Commands',
 		dir: 'Commands',
 		default: false,
@@ -53,18 +65,51 @@ export const ARTIFACTS: ArtifactsArray = [
 		},
 	},
 	{
-		type: 'template',
+		type: 'Template',
 		name: 'Templates',
 		dir: 'Templates',
 		default: false,
-		contexts: ['editor', 'explorer'],
+		// Templates write a whole file into the workspace from the Explorer, so they
+		// leave the editor menu (D4). `multiBlock: false` is D1 — a template is one
+		// block; a 2+ block file is a validation error, expressed here in the table.
+		contexts: ['explorer'],
+		createForm: true,
+		writesFile: true,
+		form: {
+			language: { mode: 'free', default: '' },
+			label: { singular: 'template' },
+			multiBlock: false,
+		},
 	},
 	{
-		type: 'variables',
+		type: 'Variables',
 		name: 'Variables',
 		dir: 'Variables',
 		default: false,
 		contexts: ['all'],
+	},
+	{
+		type: 'AIPrompt',
+		name: 'AI Prompts',
+		dir: 'AIPrompts',
+		// Namesake of the feature — auto-created on first vault selection, like
+		// Snippets. A user who toggles it off has `false` written to settings, so
+		// it does not come back.
+		default: true,
+		// A prompt is pasted into a chat pane (editor) or a CLI agent (terminal).
+		// The only type declaring both, so it is the only one resolving its
+		// target surface at insert time.
+		contexts: ['editor', 'terminal'],
+		createForm: true,
+		form: {
+			// The payload is flagged markdown (the syntax `flags.service.ts`
+			// owns), so there is no language to pick — that service already
+			// defaults it to markdown.
+			language: { mode: 'hidden', default: 'markdown' },
+			label: { singular: 'AI prompt' },
+			// Flags' named regions already become ParsedBlocks; no new UI needed.
+			multiBlock: true,
+		},
 	},
 ];
 

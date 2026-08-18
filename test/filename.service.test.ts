@@ -2,6 +2,7 @@ import * as assert from 'node:assert';
 import {
     validateArtifactFilename,
     validateFolderName,
+    validateTargetFileName,
     slugify,
     deriveFileName,
 } from '../src/services/filename.service.js';
@@ -254,6 +255,53 @@ suite('filename.service', () => {
 
         test('title that slugifies to empty → untitled', () => {
             assert.strictEqual(deriveFileName('!!!'), 'untitled');
+        });
+    });
+
+    // ── validateTargetFileName (Templates-as-files, T3) ──────────────────────
+
+    suite('validateTargetFileName', () => {
+
+        test('carries an extension → ok (unlike a vault .md name)', () => {
+            assert.strictEqual(validateTargetFileName('Button.tsx').ok, true);
+        });
+
+        test('a .md target is allowed (a template may output markdown)', () => {
+            // The vault-name validator rejects .md; the workspace-target one must not.
+            assert.strictEqual(validateTargetFileName('README.md').ok, true);
+            assert.strictEqual(validateArtifactFilename('README.md').ok, false);
+        });
+
+        test('interior dots preserved', () => {
+            assert.strictEqual(validateTargetFileName('component.test.ts').ok, true);
+        });
+
+        test('forward slash → reject (single path segment only)', () => {
+            assert.strictEqual(validateTargetFileName('a/b.ts').ok, false);
+        });
+
+        test('backslash → reject', () => {
+            assert.strictEqual(validateTargetFileName('a\\b.ts').ok, false);
+        });
+
+        test('NUL / control character → reject', () => {
+            assert.strictEqual(validateTargetFileName('a\0.ts').ok, false);
+        });
+
+        test('leading dot → reject', () => {
+            assert.strictEqual(validateTargetFileName('.env').ok, false);
+        });
+
+        test('trailing dot → reject', () => {
+            assert.strictEqual(validateTargetFileName('foo.').ok, false);
+        });
+
+        test('reserved system name → reject', () => {
+            assert.strictEqual(validateTargetFileName('CON').ok, false);
+        });
+
+        test('empty → reject', () => {
+            assert.strictEqual(validateTargetFileName('').ok, false);
         });
     });
 });

@@ -1,12 +1,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getAllTypes, getTypeForDir } from './artifact-type-config.service.js';
+import { getAllTypes, getTypeForDir, writesWholeFile } from './artifact-type-config.service.js';
+import { extractFlaggedRegions, type FlaggedRegion } from './flags.service.js';
 import type { ArtifactType, ParsedArtifactFile, ParsedBlock, ParsedFrontmatter, ParsedVar } from '../types/parsed-artifact.types.js';
 
-// Accepted `type` values — any unrecognised value keeps the 'snippet' fallback.
-// Derived from ARTIFACTS so a type added there is accepted here immediately;
-// as a hardcoded list this silently downgraded unlisted types to 'snippet'.
-// Guarded by the drift test in test/constants.test.ts.
+// Accepted `artifactType` values — any unrecognised value falls back to the
+// directory-derived default. Derived from ARTIFACTS so a type added there is
+// accepted here immediately; as a hardcoded list this silently downgraded
+// unlisted types to a hardcoded default. Guarded by the drift test in
+// test/constants.test.ts.
 const VALID_TYPES = new Set<string>(getAllTypes());
 
 // Frontmatter keys copied verbatim into `ParsedFrontmatter` (string-typed).
@@ -15,10 +17,28 @@ const VALID_TYPES = new Set<string>(getAllTypes());
  *
  * Exported so `test/frontmatter-keys.test.ts` can bind this list to the
  * serializer's `FRONTMATTER_KEY_ORDER`: a key the serializer emits but this set
- * (plus the specially-handled `type` and `tags`) does not know is silently
+ * (plus the specially-handled `artifactType` and `tags`) does not know is silently
  * dropped on the next read.
  */
-export const STRING_FRONTMATTER_KEYS = new Set<string>(['title', 'description', 'language', 'env', 'target']);
+export const STRING_FRONTMATTER_KEYS = new Set<string>(['title', 'description', 'language', 'env', 'target', 'extension', 'provider', 'model', 'version']);
+
+/**
+ * Frontmatter keys the parser reads as **real booleans** — `true` only when the
+ * value is exactly `true`, so a stringly-typed `'false'` cannot leak downstream
+ * as a truthy value.
+ *
+ * **Read-side only:** `index` is deliberately absent from the serializer's
+ * `FRONTMATTER_KEY_ORDER`, which `test/frontmatter-keys.test.ts` guards.
+ */
+export const BOOLEAN_FRONTMATTER_KEYS = new Set<string>(['index']);
+
+/**
+ * Frontmatter keys the parser reads as **inline arrays** (`key: [a, b, c]`).
+ *
+ * `tags` and `paths` share `parseInlineArray`, so the inline-array splitting rule
+ * exists exactly once. `paths` is read-side only; `tags` round-trips normally.
+ */
+export const ARRAY_FRONTMATTER_KEYS = new Set<string>(['tags', 'paths']);
 
 // Shared regex constants — declared once to avoid SonarQube duplicated-literal flags
 // and to keep parsing rules in a single source of truth.
@@ -28,34 +48,83 @@ const CODE_FENCE_RE        = /```(\w*)\r?\n([\s\S]*?)```/;
 const VKS_FENCE_RE         = /```vks\r?\n([\s\S]*?)```/;
 
 /**
- * Matches a `<VK-Hint>` variable token, where `Hint` starts with a letter.
+ * Fence language reported for a flag-delimited payload.
+ *
+ * The payload is the vault note's own markdown, so `markdown` is what it is —
+ * and it makes the whole chain agree without a special case: hljs highlights it,
+ * and `extForLang('markdown')` yields the `.md` a written agent config wants.
+ */
+const FLAGGED_PAYLOAD_LANG = 'markdown';
+
+/**
+ * Removes the leading `---` frontmatter block from file content.
+ *
+ * Four call sites needed this; as inline `.replace(FRONTMATTER_STRIP_RE, '')`
+ * calls the strip rule was quietly restated each time.
+ *
+ * @param content - Full UTF-8 file content.
+ * @returns The body with any frontmatter block removed.
+ *
+ * @example
+ * stripFrontmatter('---\nartifactType: Snippet\n---\nbody') // → 'body'
+ */
+function stripFrontmatter(content: string): string {
+    return content.replace(FRONTMATTER_STRIP_RE, '');
+}
+
+/**
+ * Matches a `<VK-Hint>` variable token — **opening or closing form** — where
+ * `Hint` starts with a letter. Both forms name the *same* variable.
+ *
+ * The closing form exists for markdown-native payloads (flags, §7): unfenced,
+ * `<VK-repo>` is a legal HTML open tag, so Obsidian renders it as an unclosed
+ * custom element that swallows every block below it. Writing
+ * `<VK-repo></VK-repo>` (or a lone `</VK-repo>`) leaves nothing open, so the
+ * note renders — and both spellings resolve to the one variable.
  *
  * Exported so `render.service.ts` highlights exactly the tokens this parser
- * detects — the two drifted apart as separate literals before Phase 1.
+ * detects — the two drifted apart as separate literals before Phase 1. The
+ * webview's `vkWrap` copy (client JS cannot import) is bound to this by
+ * `test/webview-snippets.test.ts`.
  *
  * **Carries the `/g` flag**, so it holds `lastIndex` state. Only use it with
  * `matchAll` or `replace`/`replaceAll`, which reset `lastIndex` themselves;
  * never with a bare `.test()` or `.exec()` loop.
  *
  * @example
- * 'x = <VK-host>'.replaceAll(VK_TOKEN_RE, 'v')  // → 'x = v'
+ * 'x = <VK-host>'.replaceAll(VK_TOKEN_RE, 'v')   // → 'x = v'
+ * 'x = </VK-host>'.replaceAll(VK_TOKEN_RE, 'v')  // → 'x = v'
  */
-export const VK_TOKEN_RE = /<VK-([A-Za-z]\w*)>/g;
+export const VK_TOKEN_RE = /<\/?VK-([A-Za-z]\w*)>/g;
+
+/**
+ * Matches an **adjacent** `<VK-Hint></VK-Hint>` pair — the render-safe spelling
+ * of a single token, collapsed to one value by `resolveVars`.
+ *
+ * The backreference is what keeps it a pair: `<VK-a></VK-b>` is two separate
+ * tokens and is left to the per-token pass.
+ *
+ * @example
+ * '<VK-host></VK-host>'.replaceAll(VK_PAIR_RE, 'v') // → 'v'
+ */
+const VK_PAIR_RE = /<VK-([A-Za-z]\w*)><\/VK-\1>/g;
 
 /**
  * Extracts and parses the YAML frontmatter block from raw vault file content.
  *
  * Frontmatter must appear at the very start of the file between `---` fences.
- * Unknown keys are silently skipped; an invalid `type` value falls back to `'snippet'`.
+ * Unknown keys are silently skipped; an invalid `artifactType` value falls back
+ * to the directory-derived default (D1/D1e) — never a hardcoded literal, and
+ * never case-insensitively to a differently-cased spelling of a known value.
  *
  * @param content - Full UTF-8 string content of the `.md` file.
- * @returns Populated `ParsedFrontmatter`; returns `{ type: 'snippet' }` when no frontmatter is found.
+ * @returns Populated `ParsedFrontmatter`; returns `{ artifactType: defaultType }` when no frontmatter is found.
  *
  * @example
- * parseFrontmatter('---\ntype: template\ntitle: React Component\nlanguage: tsx\n---\n')
+ * parseFrontmatter('---\nartifactType: Template\ntitle: React Component\nlanguage: tsx\n---\n')
  */
-function parseFrontmatter(content: string, defaultType: ArtifactType = 'snippet'): ParsedFrontmatter {
-    const result: ParsedFrontmatter = { type: defaultType };
+function parseFrontmatter(content: string, defaultType: ArtifactType = 'Snippet'): ParsedFrontmatter {
+    const result: ParsedFrontmatter = { artifactType: defaultType };
     const match = FRONTMATTER_BLOCK_RE.exec(content);
     if (!match) { return result; }
 
@@ -81,22 +150,48 @@ function parseFrontmatter(content: string, defaultType: ArtifactType = 'snippet'
  * @param raw    - Trimmed raw value string.
  *
  * @example
- * applyFrontmatterField({ type: 'snippet' }, 'tags', '[a, b]')
+ * applyFrontmatterField({ artifactType: 'Snippet' }, 'tags', '[a, b]')
  */
 function applyFrontmatterField(result: ParsedFrontmatter, key: string, raw: string): void {
-    if (key === 'type') {
-        if (VALID_TYPES.has(raw)) { result.type = raw as ArtifactType; }
+    if (key === 'artifactType') {
+        // Exact match only — D1/D1e rules out a case-insensitive fallback, so
+        // `artifactType: snippet` (wrong case) never matches `'Snippet'` and
+        // falls through to the directory-derived default instead.
+        if (VALID_TYPES.has(raw)) { result.artifactType = raw as ArtifactType; }
         return;
     }
-    if (key === 'tags') {
-        // Parse inline array syntax: `[a, b, c]` → `['a', 'b', 'c']`
-        const inner = raw.replaceAll(/^\[|\]$/g, '');
-        result.tags = inner.split(',').map(t => t.trim()).filter(Boolean);
+    if (ARRAY_FRONTMATTER_KEYS.has(key)) {
+        (result as unknown as Record<string, string[]>)[key] = parseInlineArray(raw);
+        return;
+    }
+    if (BOOLEAN_FRONTMATTER_KEYS.has(key)) {
+        // Exact `true` only — anything else is false, so no stringly-typed
+        // 'false' reaches a downstream `if (fm.index)` as a truthy value.
+        (result as unknown as Record<string, boolean>)[key] = raw === 'true';
         return;
     }
     if (STRING_FRONTMATTER_KEYS.has(key)) {
         (result as unknown as Record<string, string>)[key] = raw;
     }
+}
+
+/**
+ * Splits inline-array frontmatter syntax — `[a, b, c]` — into a trimmed list.
+ *
+ * The one owner of this rule: `tags` and `paths` both call it, so the split
+ * cannot drift into two implementations that disagree on whitespace or on empty
+ * entries. Brackets are optional; empty entries are dropped.
+ *
+ * @param raw - Trimmed raw value string as written after the key's colon.
+ * @returns Ordered list of non-empty trimmed entries; `[]` when the value is empty.
+ *
+ * @example
+ * parseInlineArray('[express, api]')          // → ['express', 'api']
+ * parseInlineArray('src/components, ui/src')  // → ['src/components', 'ui/src']
+ */
+function parseInlineArray(raw: string): string[] {
+    const inner = raw.replaceAll(/^\[|\]$/g, '');
+    return inner.split(',').map(t => t.trim()).filter(Boolean);
 }
 
 /**
@@ -110,11 +205,11 @@ function applyFrontmatterField(result: ParsedFrontmatter, key: string, raw: stri
  * @returns `{ code, fenceLang }` — code is `''` and fenceLang is `undefined` when no fence is found.
  *
  * @example
- * parseCodeBlock('---\ntype: snippet\n---\n\n```javascript\nconsole.log("hi");\n```')
+ * parseCodeBlock('---\nartifactType: Snippet\n---\n\n```javascript\nconsole.log("hi");\n```')
  */
 function parseCodeBlock(content: string): { code: string; fenceLang?: string } {
     // Strip frontmatter before scanning to avoid matching a fence inside it
-    const afterFrontmatter = content.replace(FRONTMATTER_STRIP_RE, '');
+    const afterFrontmatter = stripFrontmatter(content);
     const match = CODE_FENCE_RE.exec(afterFrontmatter);
     if (!match) { return { code: '' }; }
     return {
@@ -150,7 +245,7 @@ function parseVarLines(raw: string): ParsedVar[] {
  * Locates and parses the variables section from raw vault file content.
  *
  * Two formats are supported, tried in priority order:
- * 1. **Fenced block** — ` ```vks\nKEY=val\n``` ` (standard for `type: variables` files).
+ * 1. **Fenced block** — ` ```vks\nKEY=val\n``` ` (standard for `artifactType: Variables` files).
  * 2. **Unfenced section** — a `vars:` or `vars` label on its own line followed by
  *    `KEY=value` pairs, placed after the ` ```code` block.
  *
@@ -163,15 +258,18 @@ function parseVarLines(raw: string): ParsedVar[] {
  * parseVars('...\n```javascript\n...\n```\n\nvars:\nroute=/test\n')
  */
 function parseVars(content: string): ParsedVar[] {
-    // Priority 1: fenced ```vks block — used by type: variables files
+    // Priority 1: fenced ```vks block — used by artifactType: Variables files
     const fenced = VKS_FENCE_RE.exec(content);
     if (fenced) { return parseVarLines(fenced[1]); }
 
     // Priority 2: unfenced section after the code block ("vars:" or "vars" label)
-    const afterCode = content
-        .replace(FRONTMATTER_STRIP_RE, '') // strip frontmatter
+    const afterCode = stripFrontmatter(content)
         .replace(CODE_FENCE_RE, '');       // strip first code block
-    const unfenced = /\bvars:?\s*\r?\n([\s\S]+?)(?:\n\n|\n*$)/.exec(afterCode);
+    // `(?:\n\n|$)` — not `(?:\n\n|\n*$)`: the trailing `\n*` overlapped with the
+    // lazy body group, giving the engine many equivalent ways to split the same
+    // text (super-linear backtracking, S8786). Behaviour is identical because
+    // `parseVarLines` discards the blank trailing line either way.
+    const unfenced = /\bvars:?[ \t]*\r?\n([\s\S]+?)(?:\n\n|$)/.exec(afterCode);
     if (unfenced) { return parseVarLines(unfenced[1]); }
 
     return [];
@@ -212,6 +310,12 @@ export function extractVars(code: string): ParsedVar[] {
  * unchanged so partial substitution is safe. Non-VK syntax — HTML tags, TypeScript
  * generics, template literals, Handlebars — is never touched.
  *
+ * **Two passes, because both spellings mean one variable.** An adjacent
+ * `<VK-x></VK-x>` pair is the render-safe way to write a token in a
+ * markdown-native payload, so it collapses to the value **once**; the per-token
+ * pass then handles every remaining opening *or* closing tag. Reversing the
+ * order would emit the value twice for a pair.
+ *
  * @param code - String potentially containing `<VK-hint>` tokens.
  * @param vars - Map of full token name (e.g. `'VK-host'`) to replacement value.
  * @returns The string with all resolvable tokens substituted.
@@ -221,12 +325,18 @@ export function extractVars(code: string): ParsedVar[] {
  *
  * @example
  * resolveVars('<VK-known> <VK-unknown>', { 'VK-known': 'hi' })
+ *
+ * @example
+ * resolveVars('run <VK-host></VK-host>', { 'VK-host': 'db' }) // → 'run db' (not 'db db')
  */
 export function resolveVars(code: string, vars: Record<string, string>): string {
-    return code.replaceAll(VK_TOKEN_RE, (match, hint: string) => {
+    const substitute = (match: string, hint: string): string => {
         const key = `VK-${hint}`;
         return key in vars ? vars[key] : match;
-    });
+    };
+    return code
+        .replaceAll(VK_PAIR_RE, substitute)
+        .replaceAll(VK_TOKEN_RE, substitute);
 }
 
 /**
@@ -244,12 +354,12 @@ export function resolveVars(code: string, vars: Record<string, string>): string 
  * @returns Ordered array of `ParsedBlock` objects, or `[]` for single-block files.
  *
  * @example
- * parseBlocks('---\ntype: snippet\n---\n## Dev\ndev server\n```bash\nhttp://<VK-host>\n```\n## Prod\n```bash\nhttp://prod.example.com\n```')
+ * parseBlocks('---\nartifactType: Snippet\n---\n## Dev\ndev server\n```bash\nhttp://<VK-host>\n```\n## Prod\n```bash\nhttp://prod.example.com\n```')
  */
 
 export function parseBlocks(content: string): ParsedBlock[] {
     // Strip frontmatter before scanning
-    const body = content.replace(FRONTMATTER_STRIP_RE, '');
+    const body = stripFrontmatter(content);
 
     // Split on ## headings — keep delimiter at start of each chunk via lookahead
     const sections = body.split(/(?=^## )/m).filter(s => s.startsWith('## '));
@@ -367,21 +477,153 @@ function mergeVarDefaults(detected: ParsedVar[], defaults: ParsedVar[]): ParsedV
  * parseFromContent(content, uri.fsPath, rootUri.fsPath);
  */
 export function parseFromContent(content: string, filePath: string, artifactRootDir: string): ParsedArtifactFile {
-    // A file with no `type:` is typed by the directory it was filed in — vault
+    // A file with no `artifactType:` is typed by the directory it was filed in — vault
     // files routinely carry no frontmatter at all, and without this a
-    // `Commands/` file parsed as 'snippet' and inserted at the cursor instead
+    // `Commands/` file parsed as 'Snippet' and inserted at the cursor instead
     // of being sent to the terminal.
     const frontmatter = parseFrontmatter(content, getTypeForDir(path.basename(artifactRootDir)));
-    const { code, fenceLang } = parseCodeBlock(content);
-    if (!frontmatter.language && fenceLang) { frontmatter.language = fenceLang; }
+
+    // Flags win over fences: a file that delimits its payload with flags
+    // (syntax owned by `flags.service.ts`) says so explicitly, and its markdown
+    // body would otherwise be read as "no code block at all". Files without
+    // flags take the classic path unchanged — this is additive, so no existing
+    // vault file re-parses differently.
+    const regions = extractFlaggedRegions(stripFrontmatter(content));
+    const payload = regions.length > 0
+        ? readFlaggedPayload(regions, content)
+        : readUnflaggedPayload(content, frontmatter.artifactType);
+
+    if (!frontmatter.language && payload.fenceLang) { frontmatter.language = payload.fenceLang; }
     return {
         filePath,
         fileName:     path.basename(filePath, '.md'),
         relativePath: path.relative(artifactRootDir, filePath),
         frontmatter,
-        code,
-        vars:         parseVars(content),
-        blocks:       parseBlocks(content),
+        code:         payload.code,
+        vars:         payload.vars,
+        blocks:       payload.blocks,
+    };
+}
+
+/** The four payload fields a file's body yields, however it is delimited. */
+interface ParsedPayload {
+    code: string;
+    fenceLang?: string;
+    vars: ParsedVar[];
+    blocks: ParsedBlock[];
+}
+
+/**
+ * Reads the classic fence-delimited payload — the pre-flags behaviour, moved
+ * behind one name so `parseFromContent` states the choice in a single line.
+ *
+ * @param content - Full UTF-8 file content (frontmatter included).
+ * @returns Code, fence language, explicit vars, and `##` blocks.
+ *
+ * @example
+ * readFencedPayload('---\nartifactType: Snippet\n---\n```js\nx\n```')
+ */
+function readFencedPayload(content: string): ParsedPayload {
+    const { code, fenceLang } = parseCodeBlock(content);
+    return { code, fenceLang, vars: parseVars(content), blocks: parseBlocks(content) };
+}
+
+/**
+ * Reads a file that carries **no flags**: the classic fenced payload, or — for a
+ * whole-file type with nothing fenced at all — the bare note body.
+ *
+ * Flags are optional for `template` / `agent` because such a file *is* the
+ * artifact: a one-block markdown note needs no markers to say "all of it". The
+ * fallback fires only when the file offers nothing else, so every fenced or
+ * multi-block file keeps its existing meaning exactly.
+ *
+ * A ` ```vks ` fence does not count as content — it is the defaults section, and
+ * without this check a note whose only fence is `vks` would parse its own
+ * variable list as the payload.
+ *
+ * @param content - Full UTF-8 file content (frontmatter included).
+ * @param type    - Parsed artifact type; only whole-file types get the fallback.
+ * @returns The payload fields for a flag-less file.
+ *
+ * @example
+ * readUnflaggedPayload('---\nartifactType: AIAgentsConfig\n---\nBe terse.', 'AIAgentsConfig')
+ * // → { code: 'Be terse.', fenceLang: 'markdown', … }
+ */
+function readUnflaggedPayload(content: string, type: ArtifactType): ParsedPayload {
+    const fenced = readFencedPayload(content);
+    const hasContentFence = fenced.code !== '' && fenced.fenceLang !== 'vks';
+    if (hasContentFence || !writesWholeFile(type)) { return fenced; }
+
+    const body = stripVarsSection(stripFrontmatter(content)).trim();
+    if (body === '') { return fenced; }
+
+    return {
+        code:      body,
+        fenceLang: FLAGGED_PAYLOAD_LANG,
+        vars:      mergeVarDefaults(extractVars(body), fenced.vars),
+        blocks:    [],
+    };
+}
+
+/**
+ * Removes the trailing defaults section — an optional `vars:` label plus the
+ * ` ```vks ` fence — from a note body.
+ *
+ * Only used by the bare-markdown fallback, where the whole body is the payload
+ * and the author's variable list must not be written into the output file.
+ *
+ * @param body - File body with frontmatter already stripped.
+ * @returns The body without its vars section.
+ *
+ * @example
+ * stripVarsSection('Be terse.\n\nvars:\n```vks\nVK-a=1\n```') // → 'Be terse.\n\n'
+ */
+function stripVarsSection(body: string): string {
+    return body
+        .replace(VKS_FENCE_RE, '')
+        .replace(/^[ \t]*vars:?[ \t]*$/m, '');
+}
+
+/**
+ * Reads a flag-delimited payload: the region content **is** the artifact, kept
+ * verbatim (inner ` ``` ` fences and all).
+ *
+ * Shape follows the existing conventions rather than inventing new ones — one
+ * region is a single-block file (empty `blocks`, its name decorative, the title
+ * comes from frontmatter); two or more become `ParsedBlock`s keyed by their flag
+ * names, so the multi-block picker and preview work with no new UI.
+ *
+ * Unlike the fenced path, vars are **auto-detected** from the payload and then
+ * overlaid with any explicit ` ```vks ` defaults — a prompt's whole value is its
+ * `<VK-xxx>` tokens, so requiring an explicit list would be a trap. Keep the
+ * ` ```vks ` fence outside the flags: defaults are file-level, and anything
+ * between the flags is payload.
+ *
+ * @param regions - Regions found in the body, in document order (never empty).
+ * @param content - Full UTF-8 file content, for the file-level vars section.
+ * @returns Code, `markdown` fence language, merged vars, and per-region blocks.
+ *
+ * @example
+ * readFlaggedPayload([{ name: '', content: 'Review <VK-file>' }], fileText)
+ */
+function readFlaggedPayload(regions: FlaggedRegion[], content: string): ParsedPayload {
+    const defaults = parseVars(content);
+    const varsFor  = (code: string): ParsedVar[] => mergeVarDefaults(extractVars(code), defaults);
+    const first    = regions[0];
+
+    return {
+        code:      first.content,
+        fenceLang: FLAGGED_PAYLOAD_LANG,
+        vars:      varsFor(first.content),
+        blocks:    regions.length > 1
+            ? regions.map(r => ({
+                heading:     r.name,
+                description: '',
+                code:        r.content,
+                fenceLang:   FLAGGED_PAYLOAD_LANG,
+                vars:        varsFor(r.content),
+            }))
+            : [],
     };
 }
 

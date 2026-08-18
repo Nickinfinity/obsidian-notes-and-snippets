@@ -63,7 +63,7 @@ function parsedToModel(parsed: ParsedArtifactFile): ArtifactFormModel {
             vars:        b.vars,
         }));
         return {
-            type:        parsed.frontmatter.type,
+            artifactType: parsed.frontmatter.artifactType,
             title:       parsed.frontmatter.title       ?? '',
             description: parsed.frontmatter.description ?? '',
             tags:        parsed.frontmatter.tags        ?? [],
@@ -72,7 +72,7 @@ function parsedToModel(parsed: ParsedArtifactFile): ArtifactFormModel {
     }
 
     return {
-        type:        parsed.frontmatter.type,
+        artifactType: parsed.frontmatter.artifactType,
         title:       parsed.frontmatter.title       ?? '',
         description: parsed.frontmatter.description ?? '',
         tags:        parsed.frontmatter.tags        ?? [],
@@ -94,7 +94,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
 
     test('snippet-minimal: emits frontmatter, language in fence and key, no vars block', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'Minimal Snippet',
             description: 'Smallest valid snippet.',
             tags: [],
@@ -102,7 +102,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
         };
         const expected = [
             '---',
-            'type: snippet',
+            'artifactType: Snippet',
             'title: Minimal Snippet',
             'description: Smallest valid snippet.',
             'language: javascript',
@@ -120,7 +120,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
 
     test('snippet-quoted-default: emits tags and vks fence with verbatim quoted default', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'Quoted Default Snippet',
             description: 'Tests verbatim default preservation with quoted strings.',
             tags: ['ui', 'state'],
@@ -132,7 +132,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
         };
         const expected = [
             '---',
-            'type: snippet',
+            'artifactType: Snippet',
             'title: Quoted Default Snippet',
             'description: Tests verbatim default preservation with quoted strings.',
             'language: javascript',
@@ -156,7 +156,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
 
     test('snippet-plain-text: omits language key, emits bare fence', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'Plain Text Snippet',
             description: 'Plain text with no language field and a bare code fence.',
             tags: [],
@@ -168,7 +168,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
         };
         const expected = [
             '---',
-            'type: snippet',
+            'artifactType: Snippet',
             'title: Plain Text Snippet',
             'description: Plain text with no language field and a bare code fence.',
             '---',
@@ -186,7 +186,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
 
     test('command-with-defaults: locked type emits language: bash regardless of block.language', () => {
         const model: ArtifactFormModel = {
-            type: 'command',
+            artifactType: 'Command',
             title: 'Deploy Command',
             description: 'Deploy to a named environment and region.',
             tags: ['deploy'],
@@ -201,7 +201,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
         };
         const expected = [
             '---',
-            'type: command',
+            'artifactType: Command',
             'title: Deploy Command',
             'description: Deploy to a named environment and region.',
             'language: bash',
@@ -226,7 +226,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
 
     test('snippet-multi-block: no top-level language or code fence; per-block headings and vks', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'API URLs',
             description: 'Development and production API base URLs.',
             tags: ['api', 'urls'],
@@ -249,7 +249,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
         };
         const expected = [
             '---',
-            'type: snippet',
+            'artifactType: Snippet',
             'title: API URLs',
             'description: Development and production API base URLs.',
             'tags: [api, urls]',
@@ -287,7 +287,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
 
     test('snippet-orphan-default: emits vks for var absent from code (orphan default)', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'Orphan Default Snippet',
             description: 'Declares a variable default for a token not present in the code body.',
             tags: [],
@@ -299,7 +299,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
         };
         const expected = [
             '---',
-            'type: snippet',
+            'artifactType: Snippet',
             'title: Orphan Default Snippet',
             'description: Declares a variable default for a token not present in the code body.',
             'language: javascript',
@@ -323,7 +323,7 @@ suite('serializeArtifact — Group A: direct emit', () => {
     test('FRONTMATTER_KEY_ORDER matches canonical order from spec', () => {
         assert.deepStrictEqual(
             Array.from(FRONTMATTER_KEY_ORDER),
-            ['type', 'title', 'description', 'language', 'tags', 'env', 'target'],
+            ['artifactType', 'title', 'description', 'language', 'extension', 'provider', 'model', 'version', 'tags', 'env', 'target'],
         );
     });
 });
@@ -377,7 +377,7 @@ suite('serializeArtifact — Group B: round-trip property', () => {
         const content2 = serializeArtifact(model);
         const parsed2 = parseFromContent(content2, filePath, FIXTURE_DIR);
 
-        assert.strictEqual(parsed2.frontmatter.type, 'command');
+        assert.strictEqual(parsed2.frontmatter.artifactType, 'Command');
         assert.strictEqual(parsed2.frontmatter.language, 'bash');      // normalised
         assert.strictEqual(parsed2.code, parsed1.code);
         assert.deepStrictEqual(parsed2.vars, parsed1.vars);
@@ -421,7 +421,7 @@ suite('serializeArtifact — YAML safety: newline strip', () => {
 
     test('newlines in title and description are stripped to single space', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'Foo\nBar',
             description: 'Line1\nLine2',
             tags: [],
@@ -435,7 +435,7 @@ suite('serializeArtifact — YAML safety: newline strip', () => {
 
     test('CRLF and CR in title are also stripped to single space', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'A\r\nB\rC',
             description: 'X',
             tags: [],
@@ -448,7 +448,7 @@ suite('serializeArtifact — YAML safety: newline strip', () => {
 
     test('vars with empty defaultValue are not emitted in vks fence', () => {
         const model: ArtifactFormModel = {
-            type: 'snippet',
+            artifactType: 'Snippet',
             title: 'T',
             description: '',
             tags: [],

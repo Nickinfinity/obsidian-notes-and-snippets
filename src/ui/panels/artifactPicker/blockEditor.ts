@@ -4,7 +4,7 @@ import { patchBlockCode, type BlockRef } from '../../../services/artifact-patche
 import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js';
 import { blockAsArtifact } from './preview.helpers.js';
 import { slugify } from '../../../services/filename.service.js';
-import { extForLang, resolveLangId } from './blockEditor.helpers.js';
+import { extForLang, resolveLangId } from '../../../services/language-map.service.js';
 import { out } from './shared.js';
 
 /**

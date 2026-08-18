@@ -3,7 +3,7 @@ import { LANG_ALIAS, LANG_EXT, LANG_FENCE } from '../src/types/constants.js';
 import {
     extForLang,
     normalizeLangId,
-} from '../src/ui/panels/artifactPicker/blockEditor.helpers.js';
+} from '../src/services/language-map.service.js';
 import { FREE_LANGUAGE_OPTIONS } from '../src/ui/panels/artifactForm/form.helpers.js';
 
 /**

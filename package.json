@@ -25,19 +25,29 @@
         "title": "Insert Snippets"
       },
       {
-        "command": "obsidian-artifacts.insert.agentsconf",
+        "command": "obsidian-artifacts.insert.aiagentsconf",
         "category": "Obsidian Artifacts",
-        "title": "Insert Agents Config"
+        "title": "Insert AI Agent Config"
       },
       {
         "command": "obsidian-artifacts.insert.commands",
         "category": "Obsidian Artifacts",
-        "title": "Insert Commands"
+        "title": "Insert Command"
       },
       {
         "command": "obsidian-artifacts.insert.templates",
         "category": "Obsidian Artifacts",
-        "title": "Insert Templates"
+        "title": "Insert Template"
+      },
+      {
+        "command": "obsidian-artifacts.insert.aiprompts",
+        "category": "Obsidian Artifacts",
+        "title": "Insert AI Prompt"
+      },
+      {
+        "command": "obsidian-artifacts.insert.aiprompts.terminal",
+        "category": "Obsidian Artifacts",
+        "title": "Insert AI Prompt"
       },
       {
         "command": "obsidian-artifacts.insert.variables",
@@ -47,6 +57,10 @@
       {
         "command": "obsidian-artifacts.create",
         "title": "Obsidian Artifacts: Create Artifact"
+      },
+      {
+        "command": "obsidian-artifacts.migrateFrontmatter",
+        "title": "Obsidian Artifacts: Migrate Vault Frontmatter"
       },
       {
         "command": "obsidian-artifacts.create.fromSelection.snippet",
@@ -76,6 +90,10 @@
         {
           "command": "obsidian-artifacts.create",
           "when": "obsidian-artifacts.vaultConfigured"
+        },
+        {
+          "command": "obsidian-artifacts.insert.aiprompts.terminal",
+          "when": "false"
         }
       ],
       "editor/context": [
@@ -85,8 +103,8 @@
           "group": "obsidian@1"
         },
         {
-          "command": "obsidian-artifacts.insert.templates",
-          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.templatesActive && !obsidian-artifacts.editorHasMultiple",
+          "command": "obsidian-artifacts.insert.aiprompts",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.editorHasMultiple",
           "group": "obsidian@1"
         },
         {
@@ -112,6 +130,11 @@
           "group": "obsidian@1"
         },
         {
+          "command": "obsidian-artifacts.insert.aiprompts.terminal",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.terminalHasMultiple",
+          "group": "obsidian@1"
+        },
+        {
           "command": "obsidian-artifacts.insert.variables",
           "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.variablesActive && !obsidian-artifacts.terminalHasMultiple",
           "group": "obsidian@1"
@@ -134,8 +157,8 @@
           "group": "obsidian@1"
         },
         {
-          "command": "obsidian-artifacts.insert.agentsconf",
-          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.agentsconfActive && !obsidian-artifacts.explorerHasMultiple",
+          "command": "obsidian-artifacts.insert.aiagentsconf",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.aiagentsconfActive && !obsidian-artifacts.explorerHasMultiple",
           "group": "obsidian@1"
         },
         {
@@ -156,8 +179,8 @@
           "group": "1_insert@1"
         },
         {
-          "command": "obsidian-artifacts.insert.templates",
-          "when": "obsidian-artifacts.templatesActive",
+          "command": "obsidian-artifacts.insert.aiprompts",
+          "when": "obsidian-artifacts.aipromptsActive",
           "group": "1_insert@2"
         },
         {
@@ -173,6 +196,11 @@
           "group": "1_insert@1"
         },
         {
+          "command": "obsidian-artifacts.insert.aiprompts.terminal",
+          "when": "obsidian-artifacts.aipromptsActive",
+          "group": "1_insert@2"
+        },
+        {
           "command": "obsidian-artifacts.insert.variables",
           "when": "obsidian-artifacts.variablesActive",
           "group": "2_variables@1"
@@ -185,8 +213,8 @@
           "group": "1_insert@1"
         },
         {
-          "command": "obsidian-artifacts.insert.agentsconf",
-          "when": "obsidian-artifacts.agentsconfActive",
+          "command": "obsidian-artifacts.insert.aiagentsconf",
+          "when": "obsidian-artifacts.aiagentsconfActive",
           "group": "1_insert@2"
         },
         {
@@ -216,10 +244,10 @@
           "default": true,
           "description": "Enable the Snippets directory. Auto-created on first vault selection."
         },
-        "obsidianArtifacts.features.agentsconf": {
+        "obsidianArtifacts.features.aiagentsconf": {
           "type": "boolean",
           "default": true,
-          "description": "Enable the Agents Config directory. Auto-created on first vault selection."
+          "description": "Enable the AI Agents Config directory. Auto-created on first vault selection."
         },
         "obsidianArtifacts.features.commands": {
           "type": "boolean",
@@ -229,7 +257,12 @@
         "obsidianArtifacts.features.templates": {
           "type": "boolean",
           "default": false,
-          "description": "Enable the Templates directory (editor and explorer context menus)."
+          "description": "Enable the Templates directory (Explorer context menu — Insert Template)."
+        },
+        "obsidianArtifacts.features.aiprompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the AI Prompts directory. Auto-created on first vault selection."
         },
         "obsidianArtifacts.features.variables": {
           "type": "boolean",
@@ -253,8 +286,8 @@
     "@types/vscode": "^1.116.0",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
     "eslint": "^10.2.1",
     "typescript": "^6.0.3"
   },

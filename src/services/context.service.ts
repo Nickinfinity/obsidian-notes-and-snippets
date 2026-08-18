@@ -16,7 +16,7 @@ const setCtx = (key: string, val: unknown): Thenable<unknown> =>
  * Pattern: `obsidian-artifacts.<dir.toLowerCase()>Active`
  * Must match the `when` clauses declared in package.json.
  *
- * @param {string} dir - The artifact `dir` field (e.g. `'Snippets'`, `'AgentsConf'`)
+ * @param {string} dir - The artifact `dir` field (e.g. `'Snippets'`, `'AIAgentsConf'`)
  * @returns {string} Fully-qualified context key
  */
 export function artifactContextKey(dir: string): string {

@@ -78,6 +78,29 @@ export function validateArtifactFilename(name: string): { ok: boolean; reason?: 
 }
 
 /**
+ * Validates a user-typed filename **destined for the workspace**, not the vault.
+ *
+ * Sibling to `validateArtifactFilename`: it shares `runCommonChecks` (so path
+ * separators, control characters, reserved names, and leading/trailing dots are
+ * still rejected, and interior dots are permitted) but — unlike the vault-name
+ * validator — it does **not** reject a `.md` extension, since a template may
+ * legitimately output a markdown file (e.g. `README.md`). The extension is part
+ * of the target name here; the vault writer appends `.md` itself, so the two
+ * rules genuinely differ and must not be merged.
+ *
+ * @param name - Target filename, extension included (e.g. `'Button.tsx'`).
+ * @returns `{ ok: true }` when valid, `{ ok: false, reason }` otherwise.
+ *
+ * @example
+ * validateTargetFileName('Button.tsx'); // → { ok: true }
+ * validateTargetFileName('README.md');  // → { ok: true }  (unlike validateArtifactFilename)
+ * validateTargetFileName('a/b.ts');     // → { ok: false, reason: ... }
+ */
+export function validateTargetFileName(name: string): { ok: boolean; reason?: string } {
+    return runCommonChecks(name);
+}
+
+/**
  * Validates a user-typed folder name created inside the artifact root.
  *
  * Adds folder-specific rules on top of `runCommonChecks`: rejects `.` and
