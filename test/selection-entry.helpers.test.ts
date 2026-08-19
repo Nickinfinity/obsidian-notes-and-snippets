@@ -1,9 +1,16 @@
 import * as assert from 'node:assert';
-import { buildSnippetPrefill, buildCommandPrefill } from '../src/commands/create.command.js';
+import { buildSnippetPrefill, buildCommandPrefill } from '../src/commands/create-prefill.helpers.js';
 
 /**
  * Unit tests for the two pure prefill builders used by the selection-entry
  * commands (Phase 7 — VSX-85).
+ *
+ * Repointed at Wave 0 close (VSX-205) from `create.command.ts` onto
+ * `create-prefill.helpers.ts`. **The assertions are deliberately unchanged** —
+ * they are the golden net proving the copy is behaviour-identical, so editing
+ * one to accommodate the move would dissolve the only evidence that it was a
+ * move rather than a rewrite. The originals stay in `create.command.ts` until
+ * Wave 2 deletes them.
  *
  * Both helpers are VS Code-free; they only transform text + languageId into
  * a Partial<ArtifactFormModel> shape. All VS Code I/O is in the command

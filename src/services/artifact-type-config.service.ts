@@ -1,5 +1,5 @@
 import { ARTIFACTS } from '../types/constants.js';
-import type { Artifact, ArtifactTypeFormConfig, LanguageMode } from '../types/artifact.types.js';
+import type { Artifact, ArtifactContext, ArtifactTypeFormConfig, LanguageMode } from '../types/artifact.types.js';
 import type { ArtifactType } from '../types/parsed-artifact.types.js';
 
 /**
@@ -230,4 +230,68 @@ export function forcesSingleBlock(type: ArtifactType): boolean {
 export function getTypeForDir(dirName: string): ArtifactType | undefined {
     const target = dirName.toLowerCase();
     return ARTIFACTS.find(a => a.dir.toLowerCase() === target)?.type;
+}
+
+/**
+ * Reports whether an artifact type surfaces on a given VS Code context-menu
+ * surface. `'all'` in the entry's `contexts` matches every surface.
+ *
+ * `surface` excludes `'all'` by construction: `'all'` is only ever a
+ * *declaration* inside an entry's `contexts` (meaning "every surface"), never
+ * a surface a caller can query — so that combination is unrepresentable
+ * rather than a silently-false answer.
+ *
+ * `context.service.ts` still carries its own private `artifactInContext(contexts, surface)`
+ * (a raw-contexts-array equivalent of the `'all'` rule below) as of this
+ * writing; the orchestrator retires it in favour of this type-keyed version
+ * at Wave 0 close, once every caller of this service exists to import from.
+ *
+ * @param type - Canonical `ArtifactType` literal.
+ * @param surface - The context-menu surface to test (never `'all'`).
+ * @returns `true` when the type's `contexts` includes `surface` or `'all'`.
+ * @throws When the type is unknown (via `getEntry`).
+ *
+ * @example
+ * isInContext('Command', 'terminal'); // → true
+ * isInContext('Variables', 'editor'); // → true (contexts: ['all'])
+ */
+export function isInContext(type: ArtifactType, surface: Exclude<ArtifactContext, 'all'>): boolean {
+    const entry = getEntry(type);
+    return entry.contexts.includes(surface) || entry.contexts.includes('all');
+}
+
+/**
+ * Returns the create-form types that surface on a given context-menu surface.
+ *
+ * A type qualifies iff `entry.createForm === true && isInContext(entry.type, surface)`.
+ * `Variables` has no `createForm`, so it is absent from every surface despite
+ * declaring `contexts: ['all']`.
+ *
+ * @param surface - The context-menu surface to filter by (never `'all'` — see `isInContext`).
+ * @returns `ArtifactType` literals in `ARTIFACTS` declaration order.
+ *
+ * @example
+ * getCreateTypesForSurface('terminal'); // → ['Command', 'AIPrompt']
+ * getCreateTypesForSurface('explorer'); // → ['AIAgentsConfig', 'Template']
+ */
+export function getCreateTypesForSurface(surface: Exclude<ArtifactContext, 'all'>): ArtifactType[] {
+    return ARTIFACTS
+        .filter(e => e.createForm === true && isInContext(e.type, surface))
+        .map(e => e.type);
+}
+
+/**
+ * Returns the types capable of driving a template index (batch scaffolding).
+ *
+ * A type qualifies iff it surfaces on `'explorer'` (per
+ * `getCreateTypesForSurface`) and `writesFile === true` — an index can only
+ * scaffold whole-file types, and only from the Explorer.
+ *
+ * @returns `ArtifactType` literals in `ARTIFACTS` declaration order.
+ *
+ * @example
+ * getIndexCapableTypes(); // → ['AIAgentsConfig', 'Template']
+ */
+export function getIndexCapableTypes(): ArtifactType[] {
+    return getCreateTypesForSurface('explorer').filter(t => getEntry(t).writesFile === true);
 }

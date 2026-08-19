@@ -63,6 +63,14 @@ export interface ArtifactFormModel {
      */
     extension?: string;
     /**
+     * Output file name — **`artifactType: AIAgentsConfig` only**. Emitted as
+     * frontmatter `target:` when non-empty, and used **verbatim** as the written
+     * file's name (`CLAUDE.md`, `.cursorrules`) — never extension-appended, which
+     * is exactly what separates it from `extension:` above. Absent/empty for
+     * every other type.
+     */
+    target?: string;
+    /**
      * AI provider — **`type: agent` only**. Emitted as frontmatter `provider:`
      * when non-empty (single-line enforced). Absent/empty for every other type.
      */

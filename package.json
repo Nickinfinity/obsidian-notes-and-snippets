@@ -224,6 +224,40 @@
         }
       ]
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "obsidian-artifacts",
+          "title": "Obsidian Artifacts",
+          "icon": "media/obsidian-artifacts.svg"
+        }
+      ]
+    },
+    "views": {
+      "obsidian-artifacts": [
+        {
+          "id": "obsidian-artifacts.mainView",
+          "name": "Artifacts",
+          "type": "webview"
+        },
+        {
+          "id": "obsidian-artifacts.variablesView",
+          "name": "Variables"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "obsidian-artifacts.mainView",
+        "when": "!obsidian-artifacts.vaultConfigured",
+        "contents": "Choose your Obsidian vault to start creating and inserting artifacts.\n[Choose Vault Folder](command:obsidian-artifacts.settings)"
+      },
+      {
+        "view": "obsidian-artifacts.variablesView",
+        "when": "!obsidian-artifacts.vaultConfigured",
+        "contents": "Variable sets live in your vault's Variables folder.\n[Choose Vault Folder](command:obsidian-artifacts.settings)"
+      }
+    ],
     "configuration": {
       "title": "Obsidian Artifacts: AI Snippets & Tools",
       "properties": {
@@ -286,6 +320,7 @@
     "@types/vscode": "^1.116.0",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
+    "@vscode/codicons": "0.0.46-24",
     "@vscode/test-cli": "0.0.15",
     "@vscode/test-electron": "3.1.0",
     "eslint": "^10.2.1",

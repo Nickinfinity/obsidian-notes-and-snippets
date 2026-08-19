@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { detectVaultDirs } from './vault.service.js';
 import { ARTIFACTS } from '../types/constants.js';
 import { getVaultPath } from './config.service.js';
+import { isInContext } from './artifact-type-config.service.js';
+import type { ArtifactContext } from '../types/artifact.types.js';
 
 /** Prefix shared by all extension context keys — matches the VS Code settings namespace */
 const CTX = 'obsidian-artifacts';
@@ -21,14 +23,6 @@ const setCtx = (key: string, val: unknown): Thenable<unknown> =>
  */
 export function artifactContextKey(dir: string): string {
 	return `${CTX}.${dir.toLowerCase()}Active`;
-}
-
-/**
- * Returns true if an artifact belongs to the given VS Code context surface.
- * `'all'` in the artifact's `contexts` means it matches every surface.
- */
-function artifactInContext(contexts: readonly string[], surface: string): boolean {
-	return contexts.includes(surface) || contexts.includes('all');
 }
 
 /**
@@ -74,8 +68,11 @@ async function setVaultContextKeys(vaultPath: string | null): Promise<void> {
 
 	// Count active artifacts per VS Code context surface.
 	// Used by package.json `when` clauses to choose between direct entries and submenus.
-	const countActive = (surface: string) =>
-		dirs.filter(d => artifactInContext(d.contexts as readonly string[], surface) && d.exists).length;
+	// `isInContext` (artifact-type-config.service.ts) is THE `'all'`-matching rule.
+	// This file carried a private copy until Wave 0 close; two bodies for one rule
+	// is the drift `package-menus.test.ts` would only catch after it had shipped.
+	const countActive = (surface: Exclude<ArtifactContext, 'all'>) =>
+		dirs.filter(d => isInContext(d.type, surface) && d.exists).length;
 
 	await setCtx('editorHasMultiple',   countActive('editor')   >= 2);
 	await setCtx('terminalHasMultiple', countActive('terminal') >= 2);

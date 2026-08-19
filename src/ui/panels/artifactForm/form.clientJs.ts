@@ -267,7 +267,7 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
   // version (agent). Only the active type's inputs exist in the DOM; the rest
   // are null. One list drives both the dirty listeners and extractModel below,
   // so a new type-specific key is a single-line change here.
-  const TYPE_FIELD_IDS = ['extension', 'provider', 'model', 'version'];
+  const TYPE_FIELD_IDS = ['extension', 'target', 'provider', 'model', 'version'];
 
   TYPE_FIELD_IDS.forEach(function(id) {
     const el = document.getElementById(id);
@@ -288,6 +288,7 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
     const desc      = descEl ? descEl.value : '';
     // Type-specific keys — '' whenever the input is absent for this type.
     const extension = readTypeField('extension');
+    const target    = readTypeField('target');
     const provider  = readTypeField('provider');
     const model     = readTypeField('model');
     const version   = readTypeField('version');
@@ -319,7 +320,7 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
         };
       });
     }
-    return { artifactType: type, title: title, description: desc, extension: extension, provider: provider, model: model, version: version, tags: tags.slice(), blocks: blocks };
+    return { artifactType: type, title: title, description: desc, extension: extension, target: target, provider: provider, model: model, version: version, tags: tags.slice(), blocks: blocks };
   }
 
   function extractVarsForBlock(blockIndex) {
