@@ -150,6 +150,20 @@ export interface CopyMsg {
 }
 
 /**
+ * Webview (create/edit form) requests that a block's code be opened for
+ * expanded editing in a real VS Code editor tab, via
+ * `FormBlockExpandController` (T5). The extension answers with `blockUpdated`
+ * once the user saves the expanded editor.
+ *
+ * @example
+ * vscode.postMessage({ command: 'expandBlock', index: 0 });
+ */
+export interface ExpandBlockMsg {
+    command: 'expandBlock';
+    index: number;
+}
+
+/**
  * Webview cancels the entire artifact insert operation.
  *
  * @example
@@ -174,6 +188,7 @@ export type WebviewToExtensionMsg =
     | BackToPreviewMsg
     | InsertMsg
     | CopyMsg
+    | ExpandBlockMsg
     | CancelMsg;
 
 // ── Extension → Webview ───────────────────────────────────────────────────────
@@ -215,6 +230,21 @@ export interface FileUpdatedMsg {
 }
 
 /**
+ * Extension (create/edit form) reports a block's code updated after the user
+ * saved the expanded temp editor — `FormBlockExpandController.onSaved`'s
+ * `(index, code)` pair, forwarded to the webview so it can update that
+ * block's in-page code area.
+ *
+ * @example
+ * panel.webview.postMessage({ command: 'blockUpdated', index: 0, code: 'const x = 1;' });
+ */
+export interface BlockUpdatedMsg {
+    command: 'blockUpdated';
+    index: number;
+    code: string;
+}
+
+/**
  * Union of every message the extension can send to the webview.
  *
  * @example
@@ -223,4 +253,5 @@ export interface FileUpdatedMsg {
 export type ExtensionToWebviewMsg =
     | SectionSavedMsg
     | UpdateVarsMsg
-    | FileUpdatedMsg;
+    | FileUpdatedMsg
+    | BlockUpdatedMsg;

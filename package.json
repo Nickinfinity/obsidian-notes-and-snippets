@@ -69,6 +69,38 @@
       {
         "command": "obsidian-artifacts.create.fromSelection.command",
         "title": "Obsidian Artifacts: Create Command from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.create.snippets",
+        "title": "Obsidian Artifacts: Create Snippet from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.create.aiagentsconf",
+        "title": "Obsidian Artifacts: Create AI Agents Config from File"
+      },
+      {
+        "command": "obsidian-artifacts.create.commands",
+        "title": "Obsidian Artifacts: Create Command from Terminal"
+      },
+      {
+        "command": "obsidian-artifacts.create.templates",
+        "title": "Obsidian Artifacts: Create Template from File"
+      },
+      {
+        "command": "obsidian-artifacts.create.aiprompts",
+        "title": "Obsidian Artifacts: Create AI Prompt from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.create.aiprompts.terminal",
+        "title": "Obsidian Artifacts: Create AI Prompt from Terminal"
+      },
+      {
+        "command": "obsidian-artifacts.create.aiagentsconf.index",
+        "title": "Obsidian Artifacts: Create AI Agents Config Index from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.create.templates.index",
+        "title": "Obsidian Artifacts: Create Template Index from Selection"
       }
     ],
     "submenus": [
@@ -83,6 +115,18 @@
       {
         "id": "obsidian-artifacts.submenu.explorer",
         "label": "Obsidian Artifacts"
+      },
+      {
+        "id": "obsidian-artifacts.submenu.create.editor",
+        "label": "Obsidian Artifacts: Create"
+      },
+      {
+        "id": "obsidian-artifacts.submenu.create.terminal",
+        "label": "Obsidian Artifacts: Create"
+      },
+      {
+        "id": "obsidian-artifacts.submenu.create.explorer",
+        "label": "Obsidian Artifacts: Create"
       }
     ],
     "menus": {
@@ -93,6 +137,18 @@
         },
         {
           "command": "obsidian-artifacts.insert.aiprompts.terminal",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts.terminal",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf.index",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates.index",
           "when": "false"
         }
       ],
@@ -118,9 +174,19 @@
           "group": "obsidian@1"
         },
         {
-          "command": "obsidian-artifacts.create.fromSelection.snippet",
-          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured",
-          "group": "9_obsidian-artifacts@1"
+          "command": "obsidian-artifacts.create.snippets",
+          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.snippetsActive && !obsidian-artifacts.editorCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts",
+          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.editorCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "submenu": "obsidian-artifacts.submenu.create.editor",
+          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.editorCreateHasMultiple",
+          "group": "3_create@1"
         }
       ],
       "terminal/context": [
@@ -145,9 +211,19 @@
           "group": "obsidian@1"
         },
         {
-          "command": "obsidian-artifacts.create.fromSelection.command",
-          "when": "obsidian-artifacts.vaultConfigured",
-          "group": "9_obsidian-artifacts@1"
+          "command": "obsidian-artifacts.create.commands",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.commandsActive && !obsidian-artifacts.terminalCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts.terminal",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.terminalCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "submenu": "obsidian-artifacts.submenu.create.terminal",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.terminalCreateHasMultiple",
+          "group": "3_create@1"
         }
       ],
       "explorer/context": [
@@ -170,6 +246,31 @@
           "submenu": "obsidian-artifacts.submenu.explorer",
           "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.explorerHasMultiple",
           "group": "obsidian@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf",
+          "when": "!listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.aiagentsconfActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf.index",
+          "when": "listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.aiagentsconfActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates",
+          "when": "!listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.templatesActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates.index",
+          "when": "listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.templatesActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "submenu": "obsidian-artifacts.submenu.create.explorer",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@1"
         }
       ],
       "obsidian-artifacts.submenu.editor": [
@@ -221,6 +322,52 @@
           "command": "obsidian-artifacts.insert.variables",
           "when": "obsidian-artifacts.variablesActive",
           "group": "2_variables@1"
+        }
+      ],
+      "obsidian-artifacts.submenu.create.editor": [
+        {
+          "command": "obsidian-artifacts.create.snippets",
+          "when": "obsidian-artifacts.snippetsActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts",
+          "when": "obsidian-artifacts.aipromptsActive",
+          "group": "3_create@2"
+        }
+      ],
+      "obsidian-artifacts.submenu.create.terminal": [
+        {
+          "command": "obsidian-artifacts.create.commands",
+          "when": "obsidian-artifacts.commandsActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts.terminal",
+          "when": "obsidian-artifacts.aipromptsActive",
+          "group": "3_create@2"
+        }
+      ],
+      "obsidian-artifacts.submenu.create.explorer": [
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf",
+          "when": "!listMultiSelection && obsidian-artifacts.aiagentsconfActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates",
+          "when": "!listMultiSelection && obsidian-artifacts.templatesActive",
+          "group": "3_create@2"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf.index",
+          "when": "listMultiSelection && obsidian-artifacts.aiagentsconfActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates.index",
+          "when": "listMultiSelection && obsidian-artifacts.templatesActive",
+          "group": "3_create@2"
         }
       ]
     },
@@ -291,7 +438,7 @@
         "obsidianArtifacts.features.templates": {
           "type": "boolean",
           "default": false,
-          "description": "Enable the Templates directory (Explorer context menu — Insert Template)."
+          "description": "Enable the Templates directory (Explorer context menu \u2014 Insert Template)."
         },
         "obsidianArtifacts.features.aiprompts": {
           "type": "boolean",

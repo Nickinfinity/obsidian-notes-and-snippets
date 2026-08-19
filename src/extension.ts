@@ -5,7 +5,10 @@ import { registerCreateCommands } from './commands/create.command.js';
 import { registerMigrateCommand } from './commands/migrate.command.js';
 import { refreshVaultContext } from './services/context.service.js';
 import { createVaultDirectory } from './services/vault.service.js';
-import { sweepBlockEditOrphans } from './ui/panels/artifactPicker/blockEditor.js';
+import { registerCreateSurfaceCommands } from './commands/create-from-surface.command.js';
+import { MainViewProvider } from './ui/views/mainView.provider.js';
+import { sweepOrphans } from './services/scratch-file.service.js';
+import { SCRATCH_SUBDIR as FORM_BLOCK_SUBDIR } from './ui/panels/artifactForm/blockExpand.js';
 import { ARTIFACTS } from './types/constants.js';
 import { CONFIG_SECTION, getVaultPath } from './services/config.service.js';
 
@@ -23,10 +26,31 @@ export async function activate(context: vscode.ExtensionContext) {
 	registerOpenSettingsCommand(context);
 	registerInsertCommands(context);
 	registerCreateCommands(context);
+	registerCreateSurfaceCommands(context);
 	registerMigrateCommand(context);
 
-	// Clean up any block-edit temp files orphaned by a previous crash / hard-close.
-	void sweepBlockEditOrphans(context.storageUri ?? context.globalStorageUri);
+	// The main pane. Registered without a `when` on the view itself (package.json):
+	// a view that fails its `when` is dropped, and a container whose views are all
+	// dropped leaves the activity bar entirely — taking its viewsWelcome with it.
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			MainViewProvider.viewType,
+			new MainViewProvider(context.extensionUri),
+			{ webviewOptions: { retainContextWhenHidden: true } },
+		),
+	);
+
+	// Clean up scratch files orphaned by a previous crash / hard-close, through
+	// the one scratch-file authority. Two subdirs are live this wave:
+	// `blockEdit` is still written directly by `blockEditor.ts` (Wave 2 migrates
+	// it onto the service, at which point this literal collapses into the
+	// imported constant beside it), and `formBlockEdit` belongs to the form's
+	// block-expand controller. Sweeping only the new one would silently stop
+	// cleaning the old one, which is a regression, not a simplification.
+	const storageUri = context.storageUri ?? context.globalStorageUri;
+	for (const subdir of ['blockEdit', FORM_BLOCK_SUBDIR]) {
+		void sweepOrphans(storageUri, subdir);
+	}
 
 	// Await context key setup — ensures menus reflect vault state before first user interaction.
 	// Without await the keys land asynchronously and the first right-click may show no items.

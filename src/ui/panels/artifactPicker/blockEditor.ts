@@ -7,31 +7,6 @@ import { slugify } from '../../../services/filename.service.js';
 import { extForLang, resolveLangId } from '../../../services/language-map.service.js';
 import { out } from './shared.js';
 
-/**
- * Deletes any leftover block-edit temp files from a previous session (e.g. after
- * a crash or non-clean teardown). Best-effort — errors are swallowed.
- *
- * @param storageUri - Extension storage dir (`context.storageUri ?? globalStorageUri`).
- * @returns A promise that resolves once the sweep completes.
- *
- * @example
- * await sweepBlockEditOrphans(context.storageUri ?? context.globalStorageUri);
- */
-export async function sweepBlockEditOrphans(storageUri: vscode.Uri): Promise<void> {
-    const dir = vscode.Uri.joinPath(storageUri, 'blockEdit');
-    try {
-        const entries = await vscode.workspace.fs.readDirectory(dir);
-        for (const [name] of entries) {
-            try { await vscode.workspace.fs.delete(vscode.Uri.joinPath(dir, name)); }
-            catch { /* ignore individual failures */ }
-        }
-        if (entries.length > 0) {
-            out.appendLine(`[blockEdit] swept ${entries.length} orphan temp file(s)`);
-        }
-    } catch {
-        /* dir does not exist yet — nothing to sweep */
-    }
-}
 
 /** Callback bag the controller uses to push state back to the preview owner. */
 export interface BlockEditCallbacks {
