@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import { getCreateTypesForSurface, getIndexCapableTypes, getEntry } from '../services/artifact-type-config.service.js';
 import { validateObsidianVault } from '../services/vault.service.js';
 import { getVaultPath } from '../services/config.service.js';
@@ -8,6 +9,10 @@ import type { ArtifactType } from '../types/parsed-artifact.types.js';
 import type { CaptureResult } from '../types/artifact-form.types.js';
 import { captureEditor } from './capture/editor.capture.js';
 import { captureTerminal } from './capture/terminal.capture.js';
+import { captureExplorerFile } from './capture/explorer.capture.js';
+
+/** Byte ceiling for an Explorer capture — refused before the file is read. */
+const MAX_CAPTURE_BYTES = 512 * 1024;
 
 // ── Command id trio — mirrors insert.command.ts's artifactCommandId /
 //    artifactTerminalCommandId one word over. Never re-derive the lowercasing
@@ -67,6 +72,15 @@ interface CreateSurfaceEntry {
     readonly type: ArtifactType;
     /** Which menu surface this id serves — routes the capture, never re-derived. */
     readonly surface: Exclude<ArtifactContext, 'all'>;
+    /**
+     * `true` for the `.index` multi-selection variant. Carried as a flag
+     * because index and single-file entries are **both** `surface: 'explorer'`
+     * and differ only by id suffix — routing on `commandId.endsWith('.index')`
+     * would put the stringly-typed branch this plan keeps banning back at the
+     * one place it matters. The runner is T12 (Wave 4); until it lands these
+     * ids are registered and inert, which is what Human gate 2 checks.
+     */
+    readonly isIndex: boolean;
 }
 
 const SURFACES: readonly Exclude<ArtifactContext, 'all'>[] = ['editor', 'terminal', 'explorer'];
@@ -118,14 +132,14 @@ export function deriveCreateSurfaceEntries(
             const commandId = surface === 'terminal' && bothContexts
                 ? createTerminalCommandId(artifact.dir)
                 : createCommandId(artifact.dir);
-            entries.set(commandId, { commandId, type, surface });
+            entries.set(commandId, { commandId, type, surface, isIndex: false });
         }
     }
 
     for (const type of indexTypes()) {
         const commandId = createIndexCommandId(getEntry(type).dir);
         // Index variants are explorer-only by construction (writesFile && explorer).
-        entries.set(commandId, { commandId, type, surface: 'explorer' });
+        entries.set(commandId, { commandId, type, surface: 'explorer', isIndex: true });
     }
 
     return [...entries.values()];
@@ -149,16 +163,15 @@ export function buildCreateCommandIds(): string[] {
     return deriveCreateSurfaceEntries().map(e => e.commandId);
 }
 
-// ── Capture seam (empty this wave) ───────────────────────────────────────────
-
+// ── Capture seam ─────────────────────────────────────────────────────────────
 
 // ── Command registration ─────────────────────────────────────────────────────
 
 /**
  * Registers one create command per entry from `deriveCreateSurfaceEntries()`.
- * Each handler validates the vault, resolves its capture (currently always
- * absent — see `CaptureFn` above), and opens the create form for its type
- * with the resulting prefill.
+ * Each handler validates the vault, resolves its surface's capture, and opens
+ * the create form for its type with the resulting prefill. The `.index`
+ * entries are registered but inert until T12 (Wave 4) supplies their runner.
  *
  * @param context - Extension context used to register disposable subscriptions.
  * @returns void
@@ -168,14 +181,20 @@ export function buildCreateCommandIds(): string[] {
  * registerCreateSurfaceCommands(context);
  */
 export function registerCreateSurfaceCommands(context: vscode.ExtensionContext): void {
-    for (const { commandId, type, surface } of deriveCreateSurfaceEntries()) {
+    for (const { commandId, type, surface, isIndex } of deriveCreateSurfaceEntries()) {
         const disposable = vscode.commands.registerCommand(
             commandId,
-            (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
+            (uri?: vscode.Uri) => {
                 const vaultPath = getVaultPath();
                 if (!vaultPath || !validateObsidianVault(vaultPath)) { return; }
 
-                void runCapture(context, type, surface);
+                // The `.index` runner is T12 (Wave 4). Opening the plain form
+                // here would create an ordinary artifact rather than an index,
+                // so the id stays registered and inert until then — silence is
+                // the correct behaviour, not a stub.
+                if (isIndex) { return; }
+
+                void runCapture(context, type, surface, uri);
             },
         );
         context.subscriptions.push(disposable);
@@ -188,9 +207,7 @@ export function registerCreateSurfaceCommands(context: vscode.ExtensionContext):
  * **This is the only place `vscode` state is read for a capture.** The captures
  * themselves (`captureEditor`, `captureTerminal`) are pure over plain inputs, so
  * they unit-test without an extension host; the edge lives here, which is also
- * where the plan puts the toast. Explorer has no row yet — T10 adds it in Wave 3,
- * and until then that surface opens the form unprefilled, which is correct rather
- * than a stub.
+ * where the plan puts the toast and the two Explorer refusal messages.
  *
  * @param context - Extension context, forwarded to the form panel.
  * @param type - The artifact type this command creates.
@@ -204,8 +221,9 @@ async function runCapture(
     context: vscode.ExtensionContext,
     type: ArtifactType,
     surface: Exclude<ArtifactContext, 'all'>,
+    uri?: vscode.Uri,
 ): Promise<void> {
-    const result = await resolveCapture(type, surface);
+    const result = await resolveCapture(type, surface, uri);
 
     // A clipboard read is never silent — the plan makes this toast mandatory,
     // and `source` is the discriminant that decides it. The form never sees it.
@@ -231,6 +249,7 @@ async function runCapture(
 async function resolveCapture(
     type: ArtifactType,
     surface: Exclude<ArtifactContext, 'all'>,
+    uri?: vscode.Uri,
 ): Promise<CaptureResult | undefined> {
     if (surface === 'editor') {
         const editor = vscode.window.activeTextEditor;
@@ -253,5 +272,58 @@ async function resolveCapture(
         }, type);
     }
 
+    if (surface === 'explorer') {
+        return uri ? captureExplorerUri(uri, type) : undefined;
+    }
+
     return undefined;
+}
+
+/**
+ * Reads one Explorer-selected file and hands it to the pure explorer capture.
+ *
+ * **The size check lives here, not in the capture, and that is deliberate.**
+ * `captureExplorerFile` returns a bare `undefined` for *both* an oversized
+ * file and a rejected file name, so the caller cannot tell the two apart from
+ * its answer alone — yet the plan requires an oversized file to explain
+ * itself. Checking `stat().size` first splits the two messages, and gets the
+ * refusal in **before** a huge file is decoded into memory. The capture keeps
+ * its own UTF-16 length cap as defence in depth at the webview boundary; this
+ * one is bytes, which is what a file actually is.
+ *
+ * `openTextDocument` supplies the contents *and* the `languageId` in one call
+ * — VS Code's own encoding and language detection — rather than decoding the
+ * bytes here and guessing the language from the extension.
+ *
+ * @param uri - The Explorer selection.
+ * @param type - The whole-file artifact type being created.
+ * @returns The capture, or `undefined` when the file is refused (a message is shown).
+ *
+ * @example
+ * await captureExplorerUri(vscode.Uri.file('/w/CLAUDE.md'), 'AIAgentsConfig');
+ */
+async function captureExplorerUri(
+    uri: vscode.Uri,
+    type: ArtifactType,
+): Promise<CaptureResult | undefined> {
+    const stat = await vscode.workspace.fs.stat(uri);
+    if (stat.size > MAX_CAPTURE_BYTES) {
+        void vscode.window.showWarningMessage(
+            `That file is ${Math.round(stat.size / 1024)} KiB — too large to load into a create form (limit ${MAX_CAPTURE_BYTES / 1024} KiB).`,
+        );
+        return undefined;
+    }
+
+    const doc = await vscode.workspace.openTextDocument(uri);
+    const captured = captureExplorerFile(
+        { fileName: path.basename(uri.fsPath), contents: doc.getText(), languageId: doc.languageId },
+        type,
+    );
+
+    if (!captured) {
+        void vscode.window.showWarningMessage(
+            `"${path.basename(uri.fsPath)}" cannot be used as an artifact filename — it must be a plain file name.`,
+        );
+    }
+    return captured;
 }

@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import { mapLanguageId } from '../services/language-map.service.js';
+import { getFilenameField } from '../services/artifact-type-config.service.js';
 import type { ArtifactType } from '../types/parsed-artifact.types.js';
 import type { ArtifactFormModel } from '../types/artifact-form.types.js';
 
@@ -51,20 +52,6 @@ export function buildCommandPrefill(text: string): Partial<ArtifactFormModel> {
 // ── Whole-file prefill ─────────────────────────────────────────────────────────
 
 /**
- * Names the `ArtifactFormModel` key a whole-file type's filename prefills,
- * keyed by `ArtifactType` — a data table, not a per-type `if`/`switch`, so a
- * third whole-file type is a one-row addition here.
- *
- * `AIAgentsConfig`'s `target:` is the output filename verbatim (D3 agent
- * rule); `Template`'s `extension:` feeds the D3 precedence chain instead.
- * Every other type prefills neither.
- */
-const FILE_PREFILL_FIELD: Partial<Record<ArtifactType, 'target' | 'extension'>> = {
-    AIAgentsConfig: 'target',
-    Template:       'extension',
-};
-
-/**
  * Builds a `Partial<ArtifactFormModel>` prefill for a whole file dropped/opened
  * into the create flow (e.g. a workspace file offered as a `Template` or
  * `AIAgentsConfig` source).
@@ -72,8 +59,8 @@ const FILE_PREFILL_FIELD: Partial<Record<ArtifactType, 'target' | 'extension'>> 
  * The file's basename and extension are read from `fileName` with Node's
  * `path` module, independent of any directory components the caller passes.
  * `languageId` only feeds the block's fence language via `mapLanguageId`; the
- * `target`/`extension` prefill is decided by `FILE_PREFILL_FIELD`, never the
- * type literal directly.
+ * `target`/`extension` prefill is decided by `getFilenameField`, reading the
+ * `outputNameKey` declared on the `ARTIFACTS` row — never the type literal.
  *
  * @param fileName   - Source file name or path (only the basename is used).
  * @param contents   - Full file contents to prefill as `blocks[0].code`.
@@ -100,7 +87,7 @@ export function buildFilePrefill(
         blocks: [{ heading: '', description: '', language: mapLanguageId(languageId), code: contents, vars: [] }],
     };
 
-    const field = FILE_PREFILL_FIELD[type];
+    const field = getFilenameField(type);
     if (field === 'target') {
         prefill.target = path.basename(fileName);
     } else if (field === 'extension') {

@@ -189,6 +189,31 @@ export function writesWholeFile(type: ArtifactType): boolean {
 }
 
 /**
+ * Names the `ArtifactFormModel` key that supplies a type's output filename,
+ * or `undefined` for the types that do not write a whole file.
+ *
+ * The one reader of `Artifact.outputNameKey`, and the reason no caller spells
+ * `artifactType === 'Template'` to make this decision: `buildFilePrefill`
+ * (explorer capture) and `create-index.service.ts` (batch siblings) both need
+ * the same per-type answer, and both get it here. Kept in this service rather
+ * than as a local table because this module derives **everything** from
+ * `getEntry` — a `Record<ArtifactType, …>` here would be a second enumeration
+ * of the domain set, which is the drift `constants.test.ts` exists to catch.
+ *
+ * @param type - The artifact type to look up.
+ * @returns `'target'`, `'extension'`, or `undefined` when the type inserts at
+ *          the cursor rather than writing a file.
+ *
+ * @example
+ * getFilenameField('AIAgentsConfig'); // → 'target'
+ * getFilenameField('Template');       // → 'extension'
+ * getFilenameField('Snippet');        // → undefined
+ */
+export function getFilenameField(type: ArtifactType): 'target' | 'extension' | undefined {
+    return getEntry(type).outputNameKey;
+}
+
+/**
  * Reports whether a type is restricted to a single code block (D1).
  *
  * Derived from the same `form.multiBlock` flag `canMultiBlock` reads, but
