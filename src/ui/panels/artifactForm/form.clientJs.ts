@@ -25,8 +25,10 @@ import { CODE_BLOCK_CLIENT_JS } from '../artifactPicker/codeBlock.js';
  * 9. Save → §3.7 client-side validation; post `save { model }` on pass.
  * 10. Cancel → `cancel { dirty }`; dispose on `cancelConfirmed`.
  * 11. Delete entire → `deleteEntire`; dispose on `deleteEntireConfirmed`.
- * 12. Ext→webview messages: nameValidation, varsDetected, saveResult,
- *     removeBlockConfirmed, deleteEntireConfirmed, cancelConfirmed.
+ * 12. `expand-editor-btn` on card → `expandBlock { index }`; `blockUpdated`
+ *     reply replaces that block's code area (`setCodeForBlock`) and marks dirty.
+ * 13. Ext→webview messages: nameValidation, varsDetected, saveResult,
+ *     removeBlockConfirmed, deleteEntireConfirmed, cancelConfirmed, blockUpdated.
  *
  * @example
  * panel.webview.html = `<script nonce="${nonce}">(function(){
@@ -80,6 +82,23 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
 
   function codeWrapperInCard(card) {
     return card ? card.querySelector('.code-block-wrapper') : null;
+  }
+
+  // Replaces one block's code area after the expand-to-editor round-trip
+  // (blockUpdated message). window.__codeBlock.setCode always targets the
+  // *first* '#codeWrapper' in the document (server-rendered cards all carry
+  // that same id — see codeBlock.ts), so it is only safe to reuse directly in
+  // single-block mode; a multi-block card's wrapper is found by class/index
+  // instead. Both branches end in the exact same body __codeBlock.setCode
+  // uses (renderRows(code || '')) — no second esc/render implementation.
+  function setCodeForBlock(blockIndex, code) {
+    const cards = allCards();
+    if (cards.length === 0) {
+      window.__codeBlock.setCode(code);
+      return;
+    }
+    const wrapper = codeWrapperInCard(cardAt(blockIndex));
+    if (wrapper) { wrapper.innerHTML = renderRows(code || ''); }
   }
 
   // ── Code area event setup ────────────────────────────────────────────────
@@ -148,6 +167,7 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
         '<button class="reorder-btn" data-action="up" data-block="' + blockIndex + '"' + upDis + '>↑</button>' +
         '<button class="reorder-btn" data-action="down" data-block="' + blockIndex + '"' + downDis + '>↓</button>' +
         '<button class="remove-block-btn" data-block="' + blockIndex + '">\xd7</button>' +
+        '<button class="expand-editor-btn" data-block="' + blockIndex + '" aria-label="Expand block in editor">⤢</button>' +
         '<button class="expand-btn" data-block="' + blockIndex + '" aria-label="Toggle block">⎾</button>' +
       '</div>' +
       '<div class="card-body expanded" data-block="' + blockIndex + '">' +
@@ -404,6 +424,11 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
         if (msg.confirmed) { vscode.postMessage({ command: 'cancel', dirty: false }); }
         break;
       }
+      case 'blockUpdated': {
+        setCodeForBlock(msg.index, msg.code);
+        markDirty();
+        break;
+      }
     }
   });
 
@@ -549,6 +574,10 @@ export const FORM_CLIENT_JS: string = `${CODE_BLOCK_CLIENT_JS}
             const body = card.querySelector('.card-body');
             if (body) { body.classList.toggle('expanded'); }
           }
+        }
+        if (target.classList.contains('expand-editor-btn')) {
+          const blockIndex = parseInt(target.dataset.block || '0', 10);
+          vscode.postMessage({ command: 'expandBlock', index: blockIndex });
         }
       });
     }

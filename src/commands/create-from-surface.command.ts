@@ -5,7 +5,9 @@ import { getVaultPath } from '../services/config.service.js';
 import { openArtifactFormPanel } from '../ui/panels/artifactForm/panel.js';
 import type { ArtifactContext } from '../types/artifact.types.js';
 import type { ArtifactType } from '../types/parsed-artifact.types.js';
-import type { CaptureFn } from '../types/artifact-form.types.js';
+import type { CaptureResult } from '../types/artifact-form.types.js';
+import { captureEditor } from './capture/editor.capture.js';
+import { captureTerminal } from './capture/terminal.capture.js';
 
 // ── Command id trio — mirrors insert.command.ts's artifactCommandId /
 //    artifactTerminalCommandId one word over. Never re-derive the lowercasing
@@ -63,6 +65,8 @@ export function createIndexCommandId(dir: string): string {
 interface CreateSurfaceEntry {
     readonly commandId: string;
     readonly type: ArtifactType;
+    /** Which menu surface this id serves — routes the capture, never re-derived. */
+    readonly surface: Exclude<ArtifactContext, 'all'>;
 }
 
 const SURFACES: readonly Exclude<ArtifactContext, 'all'>[] = ['editor', 'terminal', 'explorer'];
@@ -114,13 +118,14 @@ export function deriveCreateSurfaceEntries(
             const commandId = surface === 'terminal' && bothContexts
                 ? createTerminalCommandId(artifact.dir)
                 : createCommandId(artifact.dir);
-            entries.set(commandId, { commandId, type });
+            entries.set(commandId, { commandId, type, surface });
         }
     }
 
     for (const type of indexTypes()) {
         const commandId = createIndexCommandId(getEntry(type).dir);
-        entries.set(commandId, { commandId, type });
+        // Index variants are explorer-only by construction (writesFile && explorer).
+        entries.set(commandId, { commandId, type, surface: 'explorer' });
     }
 
     return [...entries.values()];
@@ -163,27 +168,90 @@ export function buildCreateCommandIds(): string[] {
  * registerCreateSurfaceCommands(context);
  */
 export function registerCreateSurfaceCommands(context: vscode.ExtensionContext): void {
-    // Empty this wave by design — Waves 2–3 fill it, one capture per surface.
-    // Typed against the SHARED CaptureFn (types/artifact-form.types.ts) so the
-    // create path has exactly one answer to "what does a capture return"; a
-    // second local shape was the defect this contract exists to prevent.
-    const captures: Record<string, CaptureFn<vscode.Uri | undefined>> = {};
-
-    for (const { commandId, type } of deriveCreateSurfaceEntries()) {
+    for (const { commandId, type, surface } of deriveCreateSurfaceEntries()) {
         const disposable = vscode.commands.registerCommand(
             commandId,
             (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
                 const vaultPath = getVaultPath();
                 if (!vaultPath || !validateObsidianVault(vaultPath)) { return; }
 
-                const capture = captures[commandId];
-                // `undefined` is the one "nothing to capture" signal; the form
-                // then opens unprefilled rather than not at all.
-                const prefill = capture?.(uris?.[0] ?? uri, type)?.prefill;
-
-                openArtifactFormPanel(context, { mode: 'create', type, prefill });
+                void runCapture(context, type, surface);
             },
         );
         context.subscriptions.push(disposable);
     }
+}
+
+/**
+ * Resolves the surface's capture, then opens the form with whatever it produced.
+ *
+ * **This is the only place `vscode` state is read for a capture.** The captures
+ * themselves (`captureEditor`, `captureTerminal`) are pure over plain inputs, so
+ * they unit-test without an extension host; the edge lives here, which is also
+ * where the plan puts the toast. Explorer has no row yet — T10 adds it in Wave 3,
+ * and until then that surface opens the form unprefilled, which is correct rather
+ * than a stub.
+ *
+ * @param context - Extension context, forwarded to the form panel.
+ * @param type - The artifact type this command creates.
+ * @param surface - Which menu surface invoked it.
+ * @returns Resolves once the form has been opened.
+ *
+ * @example
+ * void runCapture(context, 'Snippet', 'editor');
+ */
+async function runCapture(
+    context: vscode.ExtensionContext,
+    type: ArtifactType,
+    surface: Exclude<ArtifactContext, 'all'>,
+): Promise<void> {
+    const result = await resolveCapture(type, surface);
+
+    // A clipboard read is never silent — the plan makes this toast mandatory,
+    // and `source` is the discriminant that decides it. The form never sees it.
+    if (result?.source === 'clipboard') {
+        void vscode.window.showInformationMessage(
+            'Used clipboard contents — verify before saving.',
+        );
+    }
+
+    openArtifactFormPanel(context, { mode: 'create', type, prefill: result?.prefill });
+}
+
+/**
+ * Reads the live `vscode` state for a surface and delegates to its pure capture.
+ *
+ * @param type - The artifact type being created.
+ * @param surface - Which menu surface invoked the command.
+ * @returns The capture result, or `undefined` when there was nothing to capture.
+ *
+ * @example
+ * await resolveCapture('Snippet', 'editor');
+ */
+async function resolveCapture(
+    type: ArtifactType,
+    surface: Exclude<ArtifactContext, 'all'>,
+): Promise<CaptureResult | undefined> {
+    if (surface === 'editor') {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) { return undefined; }
+        // Primary selection only — secondary cursors are ignored, as today.
+        return captureEditor(
+            { text: editor.document.getText(editor.selection), languageId: editor.document.languageId },
+            type,
+        );
+    }
+
+    if (surface === 'terminal') {
+        return captureTerminal({
+            readClipboard:    () => Promise.resolve(vscode.env.clipboard.readText()),
+            writeClipboard:   (text: string) => Promise.resolve(vscode.env.clipboard.writeText(text)),
+            // There is no terminal-selection API; this command copies the
+            // selection into the clipboard, which the capture then restores.
+            copySelection:    async () => { await vscode.commands.executeCommand('workbench.action.terminal.copySelection'); },
+            hasActiveTerminal: () => vscode.window.activeTerminal !== undefined,
+        }, type);
+    }
+
+    return undefined;
 }

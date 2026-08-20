@@ -56,6 +56,15 @@ function resolveSubdir(storageUri: vscode.Uri, subdir: string): vscode.Uri | und
     if (!isPathWithin(storageUri.fsPath, resolved)) {
         return undefined;
     }
+    // `''` and `'.'` resolve to the storage root itself, which `isPathWithin`
+    // accepts — it is contained, just not a *subdirectory*. That is inside the
+    // trust boundary rather than an escape, but it turns `sweepOrphans` from
+    // "delete one subdir's leftovers" into "empty the whole storage root", and
+    // the sink is a delete loop. Require a proper subdirectory so the function
+    // means what its name says.
+    if (resolved === path.resolve(storageUri.fsPath)) {
+        return undefined;
+    }
     return vscode.Uri.file(resolved);
 }
 

@@ -3,6 +3,7 @@ import { buildFormHtml } from './form.html.js';
 import { FORM_CLIENT_JS } from './form.clientJs.js';
 import { defaultModel } from './form.helpers.js';
 import { pruneVarsForSave } from './panel.helpers.js';
+import { FormBlockExpandController } from './blockExpand.js';
 import { serializeArtifact } from '../../../services/artifact-serializer.service.js';
 import { writeArtifact } from '../../../services/artifact-writer.service.js';
 import { pickDestFolder } from '../destFolderPicker.panel.js';
@@ -181,6 +182,7 @@ class ArtifactFormController {
     private panel: vscode.WebviewPanel | undefined;
     private dirty  = false;
     private subs: vscode.Disposable[] = [];
+    private blockExpand: FormBlockExpandController | undefined;
 
     private model: ArtifactFormModel;
 
@@ -218,6 +220,39 @@ class ArtifactFormController {
             this.panel.webview.onDidReceiveMessage(msg => this.handleMessage(msg as Record<string, unknown>)),
             this.panel.onDidDispose(() => this.onDisposed()),
         );
+    }
+
+    /**
+     * Opens one block in a real editor tab, and folds the saved text back into
+     * the model when the user saves it.
+     *
+     * Composed as a **callback bag**, never by handing the controller a
+     * reference to this panel — the rule the picker's controllers already
+     * follow. The controller therefore knows nothing about the form, and the
+     * form knows nothing about temp files.
+     *
+     * @param index - Index of the block to expand.
+     * @returns Resolves once the editor tab has opened.
+     *
+     * @example
+     * void controller.handleExpandBlock(0);
+     */
+    private async handleExpandBlock(index: number): Promise<void> {
+        this.blockExpand ??= new FormBlockExpandController({
+            storageUri: this.context.storageUri ?? this.context.globalStorageUri,
+            getBlock: (i) => this.model.blocks[i],
+            onSaved: (i, code) => {
+                const block = this.model.blocks[i];
+                if (!block) { return; }
+                block.code = code;
+                this.dirty = true;
+                // The webview owns the rendered code area, so push the new text
+                // rather than re-rendering the whole form and losing focus.
+                void this.panel?.webview.postMessage({ command: 'blockUpdated', index: i, code });
+            },
+            getViewColumn: () => this.panel?.viewColumn,
+        });
+        await this.blockExpand.start(index);
     }
 
     /**
@@ -276,6 +311,10 @@ class ArtifactFormController {
         this.subs.forEach(s => s.dispose());
         this.subs      = [];
         this.panel     = undefined;
+        // Watchers go before the target they post into: tear the block-expand
+        // controller down first, or its save watcher posts into a disposed webview.
+        void this.blockExpand?.teardown();
+        this.blockExpand = undefined;
         currentController = undefined;
     }
 
@@ -315,6 +354,7 @@ class ArtifactFormController {
             case 'deleteEntire': void this.handleDeleteEntire(); break;
             case 'cancel':       void this.handleCancel(Boolean(msg['dirty'])); break;
             case 'save':         void this.handleSave(msg['model'] as ArtifactFormModel); break;
+            case 'expandBlock':  void this.handleExpandBlock(Number(msg['index'])); break;
         }
     }
 

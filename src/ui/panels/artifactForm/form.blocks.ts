@@ -104,6 +104,14 @@ ${rows}
  *
  * No card chrome, no heading/description inputs (hidden in single-block mode).
  *
+ * There is no `.card-header` here to hang the expand-to-editor button on (a
+ * single-block form also has no language selector for `mode === 'hidden'`
+ * types, e.g. `AIAgentsConfig`), so the button is rendered as the first child
+ * of `.block-code` instead — the one wrapper every single-block form always
+ * has, regardless of language mode. It needs a CSS home
+ * (`src/ui/form.css`, not owned by this file — see the PR report for the
+ * exact rule) to sit in the corner rather than push the code area down.
+ *
  * @param block        - The sole block from the model.
  * @param blockIndex   - Always `0` for single-block.
  * @param mode         - Language selector mode.
@@ -128,6 +136,7 @@ export function buildSingleBlockContent(
     return `<div class="block" data-block-index="${blockIndex}">
 ${langSelector}
 <div class="block-code">
+<button class="expand-editor-btn" data-block="${blockIndex}" aria-label="Expand block in editor">⤢</button>
 ${codeHtml}
 </div>
 ${varsHtml}
@@ -164,8 +173,17 @@ export function buildMultiBlockArea(
  * Builds one accordion card for a block in multi-block mode.
  *
  * Card header: heading input, language selector, reorder buttons, remove
- * button, expand chevron. Card body: description, code area, vars.
- * Reorder `↑` disabled on block 0; `↓` disabled on the last block.
+ * button, expand-to-editor button, collapse chevron. Card body: description,
+ * code area, vars. Reorder `↑` disabled on block 0; `↓` disabled on the last
+ * block.
+ *
+ * The expand-to-editor button (`expand-editor-btn`) is a **different button
+ * and class** from the collapse chevron (`expand-btn`) — the delegated click
+ * handler in `form.clientJs.ts` matches `expand-btn` by exact token, so
+ * giving one button both classes would fire both behaviours on a single
+ * click. Exported (was private) so `test/form-expand-button.test.ts` can
+ * assert the button renders without going through the full `buildFormHtml`
+ * pipeline.
  *
  * @param block         - Block data.
  * @param blockIndex    - Zero-based index within model.blocks.
@@ -178,7 +196,7 @@ export function buildMultiBlockArea(
  * @example
  * buildBlockCard(block, 0, 2, 'free', '', codeBlockHtml)
  */
-function buildBlockCard(
+export function buildBlockCard(
     block:        ArtifactFormBlock,
     blockIndex:   number,
     total:        number,
@@ -205,6 +223,7 @@ function buildBlockCard(
     <button class="reorder-btn" data-action="up" data-block="${blockIndex}"${upDisabled}>↑</button>
     <button class="reorder-btn" data-action="down" data-block="${blockIndex}"${downDisabled}>↓</button>
     <button class="remove-block-btn" data-block="${blockIndex}">×</button>
+    <button class="expand-editor-btn" data-block="${blockIndex}" aria-label="Expand block in editor">⤢</button>
     <button class="expand-btn" data-block="${blockIndex}" aria-label="Toggle block">⌄</button>
   </div>
   <div class="${bodyClass}" data-block="${blockIndex}">

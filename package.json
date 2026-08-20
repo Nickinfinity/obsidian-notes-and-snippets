@@ -55,20 +55,8 @@
         "title": "See/Edit Variables"
       },
       {
-        "command": "obsidian-artifacts.create",
-        "title": "Obsidian Artifacts: Create Artifact"
-      },
-      {
         "command": "obsidian-artifacts.migrateFrontmatter",
         "title": "Obsidian Artifacts: Migrate Vault Frontmatter"
-      },
-      {
-        "command": "obsidian-artifacts.create.fromSelection.snippet",
-        "title": "Obsidian Artifacts: Create Snippet from Selection"
-      },
-      {
-        "command": "obsidian-artifacts.create.fromSelection.command",
-        "title": "Obsidian Artifacts: Create Command from Selection"
       },
       {
         "command": "obsidian-artifacts.create.snippets",
@@ -131,10 +119,6 @@
     ],
     "menus": {
       "commandPalette": [
-        {
-          "command": "obsidian-artifacts.create",
-          "when": "obsidian-artifacts.vaultConfigured"
-        },
         {
           "command": "obsidian-artifacts.insert.aiprompts.terminal",
           "when": "false"

@@ -5,10 +5,11 @@ import type { ArtifactFormModel } from '../types/artifact-form.types.js';
 
 // ── Pure prefill builders (exported for unit tests) ───────────────────────────
 //
-// `buildSnippetPrefill` and `buildCommandPrefill` are copied verbatim from
-// `create.command.ts`, which still owns the originals this wave (Wave 2
-// deletes them there). This module is `vscode`-free by design and must never
-// import `create.command.ts`.
+// `buildSnippetPrefill` and `buildCommandPrefill` were lifted verbatim from the
+// former `create.command.ts`, which Wave 2 deleted — **this module is now their
+// only home.** `test/selection-entry.helpers.test.ts` carries that file's
+// original assertions unchanged; they are the golden net proving the move was a
+// move and not a rewrite. This module is `vscode`-free by design.
 
 /**
  * Builds a `Partial<ArtifactFormModel>` prefill for a snippet created from an

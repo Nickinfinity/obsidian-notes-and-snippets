@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { registerOpenSettingsCommand } from './commands/openSettings.command.js';
 import { registerInsertCommands } from './commands/insert.command.js';
-import { registerCreateCommands } from './commands/create.command.js';
 import { registerMigrateCommand } from './commands/migrate.command.js';
 import { refreshVaultContext } from './services/context.service.js';
 import { createVaultDirectory } from './services/vault.service.js';
@@ -9,6 +8,7 @@ import { registerCreateSurfaceCommands } from './commands/create-from-surface.co
 import { MainViewProvider } from './ui/views/mainView.provider.js';
 import { sweepOrphans } from './services/scratch-file.service.js';
 import { SCRATCH_SUBDIR as FORM_BLOCK_SUBDIR } from './ui/panels/artifactForm/blockExpand.js';
+import { BLOCK_EDIT_SUBDIR } from './ui/panels/artifactPicker/blockEditor.js';
 import { ARTIFACTS } from './types/constants.js';
 import { CONFIG_SECTION, getVaultPath } from './services/config.service.js';
 
@@ -25,7 +25,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Register commands first so executeCommand calls below resolve correctly
 	registerOpenSettingsCommand(context);
 	registerInsertCommands(context);
-	registerCreateCommands(context);
 	registerCreateSurfaceCommands(context);
 	registerMigrateCommand(context);
 
@@ -41,14 +40,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	);
 
 	// Clean up scratch files orphaned by a previous crash / hard-close, through
-	// the one scratch-file authority. Two subdirs are live this wave:
-	// `blockEdit` is still written directly by `blockEditor.ts` (Wave 2 migrates
-	// it onto the service, at which point this literal collapses into the
-	// imported constant beside it), and `formBlockEdit` belongs to the form's
-	// block-expand controller. Sweeping only the new one would silently stop
-	// cleaning the old one, which is a regression, not a simplification.
+	// the one scratch-file authority. Both subdirs are now owned by the service
+	// and named by their owning module — no literal spelled here.
 	const storageUri = context.storageUri ?? context.globalStorageUri;
-	for (const subdir of ['blockEdit', FORM_BLOCK_SUBDIR]) {
+	for (const subdir of [BLOCK_EDIT_SUBDIR, FORM_BLOCK_SUBDIR]) {
 		void sweepOrphans(storageUri, subdir);
 	}
 

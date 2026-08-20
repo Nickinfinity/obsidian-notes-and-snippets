@@ -1,5 +1,8 @@
 import { getCreateFormTypes, getEntry } from '../../services/artifact-type-config.service.js';
 import { escHtml, styleLinkTags } from '../../utils/html.js';
+// THE create-id scheme — same authority insert.command.ts's artifactCommandId is
+// for insert. Constructing the id inline here would be a second spelling.
+import { createCommandId } from '../../commands/create-from-surface.command.js';
 import type { ArtifactType } from '../../types/parsed-artifact.types.js';
 
 /**
@@ -55,7 +58,7 @@ export function resolveCreateCommandId(type: string): string | undefined {
     if (!createType) {
         return undefined;
     }
-    return `obsidian-artifacts.create.${getEntry(createType).dir.toLowerCase()}`;
+    return createCommandId(getEntry(createType).dir);
 }
 
 // ── HTML ─────────────────────────────────────────────────────────────────────

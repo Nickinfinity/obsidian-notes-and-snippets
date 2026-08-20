@@ -77,21 +77,18 @@ suite('package.json create menus ↔ ARTIFACTS drift guard', () => {
 	}
 
 	/**
-	 * The pre-derivation create ids, still declared because **Wave 2** owns their
-	 * removal (`create.command.ts`'s handlers, their `contributes.commands`
-	 * entries, and this exclusion all go together).
+	 * Pre-derivation create ids to exclude from the comparison. **Empty since
+	 * Wave 2**, which deleted `create.command.ts` along with its handlers and
+	 * manifest entries — so every assertion below now runs against the full set
+	 * with nothing carved out.
 	 *
-	 * They share the `obsidian-artifacts.create.` prefix, so without this the
-	 * guard compares the derived set against derived-plus-legacy and fails for a
-	 * reason that is not drift. Deliberately a **literal list, not a pattern** —
-	 * a pattern would keep silently absorbing new ids after Wave 2 deletes these,
-	 * which is the opposite of what a drift guard is for. When Wave 2 removes
-	 * them, this constant becomes empty and every assertion below tightens.
+	 * Kept as an empty literal rather than deleted outright: it is the seam where
+	 * a future legacy id would be parked, and its emptiness is the visible proof
+	 * that none exists. It was never a pattern, deliberately — a pattern would
+	 * have kept silently absorbing new ids after the legacy ones went, which is
+	 * the opposite of what a drift guard is for.
 	 */
-	const LEGACY_IDS: readonly string[] = [
-		'obsidian-artifacts.create.fromSelection.snippet',
-		'obsidian-artifacts.create.fromSelection.command',
-	];
+	const LEGACY_IDS: readonly string[] = [];
 
 	const declaredCreateIds = new Set(
 		PKG.contributes.commands

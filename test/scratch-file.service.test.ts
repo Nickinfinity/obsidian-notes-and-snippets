@@ -192,4 +192,31 @@ suite('scratch-file.service', () => {
         assert.strictEqual(fs.existsSync(baitFile), true, 'sweepOrphans must not touch a directory outside storageUri');
         assert.strictEqual(fs.existsSync(victimDir), true, 'sweepOrphans must not touch a directory outside storageUri');
     });
+
+	// ── The storage root is not a subdirectory ───────────────────────────────
+
+	test("sweepOrphans refuses a subdir that resolves to the storage root itself", async () => {
+		// `''` and `'.'` are *contained* — isPathWithin accepts them — but they name
+		// the root, not a subdirectory, so sweeping them empties the whole storage
+		// dir instead of one scratch folder. Unreachable today (both callers pass
+		// module constants), pinned because the sink is a delete loop.
+		//
+		// The bait is a FILE AT THE ROOT, deliberately. A file nested inside a
+		// subdirectory survives either way: `fs.delete` on a non-empty directory
+		// throws without `recursive`, and sweepOrphans swallows per-entry errors —
+		// so a nested bait makes this test pass against the unguarded code too.
+		// That version was written first and proved green with the guard removed,
+		// which is exactly the decoration this repo's rules reject.
+		const root = makeTmpDir();
+		const bait = vscode.Uri.joinPath(root, 'bait.txt');
+		await vscode.workspace.fs.writeFile(bait, new TextEncoder().encode('keep me'));
+
+		for (const subdir of ['', '.']) {
+			await sweepOrphans(root, subdir);
+			assert.strictEqual(
+				await readFile(bait), 'keep me',
+				`sweepOrphans('${subdir}') deleted a file at the storage root`,
+			);
+		}
+	});
 });
