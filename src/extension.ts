@@ -6,6 +6,7 @@ import { refreshVaultContext } from './services/context.service.js';
 import { createVaultDirectory } from './services/vault.service.js';
 import { registerCreateSurfaceCommands } from './commands/create-from-surface.command.js';
 import { MainViewProvider } from './ui/views/mainView.provider.js';
+import { VariablesViewProvider } from './ui/views/variablesView.provider.js';
 import { sweepOrphans } from './services/scratch-file.service.js';
 import { SCRATCH_SUBDIR as FORM_BLOCK_SUBDIR } from './ui/panels/artifactForm/blockExpand.js';
 import { BLOCK_EDIT_SUBDIR } from './ui/panels/artifactPicker/blockEditor.js';
@@ -36,6 +37,17 @@ export async function activate(context: vscode.ExtensionContext) {
 			MainViewProvider.viewType,
 			new MainViewProvider(context.extensionUri),
 			{ webviewOptions: { retainContextWhenHidden: true } },
+		),
+	);
+
+	// The Variables tree. Read-only this wave; T16 (Wave 6) adds the CRUD
+	// commands that call `refresh()`. Registered here for the same reason the
+	// main pane is: a contributed view with no provider renders as a permanently
+	// empty pane and reports nothing anywhere (ledger #52).
+	context.subscriptions.push(
+		vscode.window.registerTreeDataProvider(
+			VariablesViewProvider.viewType,
+			new VariablesViewProvider(),
 		),
 	);
 

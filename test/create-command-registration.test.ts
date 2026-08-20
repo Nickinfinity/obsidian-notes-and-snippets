@@ -1,4 +1,6 @@
 import * as assert from 'node:assert';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { buildCreateCommandIds } from '../src/commands/create-from-surface.command.js';
 
@@ -76,6 +78,38 @@ suite('create surface registration — extension host', () => {
 				alreadyRegistered,
 				`${id} is contributed but has no provider — extension.ts must call `
 				+ 'registerWebviewViewProvider, or the pane shows "no data provider registered"',
+			);
+		}
+	});
+
+	test('every contributed tree view is registered in extension.ts', () => {
+		// A *static* check, deliberately, and the limitation is the point:
+		// `registerTreeDataProvider` silently REPLACES an existing provider
+		// instead of throwing, so the duplicate-registration probe the webview
+		// test above relies on cannot work here — a probe would always "succeed"
+		// and prove nothing. Reading the source is the only check available, so
+		// it is the check taken, rather than a runtime-looking assertion that
+		// cannot fail. Catches ledger #52's actual failure: nothing registered.
+		const ext = vscode.extensions.all.find(e => e.packageJSON?.name === 'obsidian-notes-and-snippets');
+		const views = (ext?.packageJSON?.contributes?.views?.['obsidian-artifacts'] ?? []) as
+			{ id: string; type?: string }[];
+		const treeIds = views.filter(v => v.type !== 'webview').map(v => v.id);
+		assert.ok(treeIds.length > 0, 'no tree views contributed — expected obsidian-artifacts.variablesView');
+
+		const source = fs.readFileSync(path.resolve(__dirname, '..', '..', 'src', 'extension.ts'), 'utf8');
+		assert.ok(
+			source.includes('registerTreeDataProvider'),
+			'extension.ts calls registerTreeDataProvider nowhere, so every contributed tree view is dead',
+		);
+
+		for (const id of treeIds) {
+			// The id may be spelled via the provider's `viewType` constant rather
+			// than a literal, so accept either — what must not happen is a
+			// contributed view no code path names at all.
+			const constantName = `${id.split('.').pop() ?? ''}`;
+			assert.ok(
+				source.includes(id) || new RegExp(`${constantName}`, 'i').test(source),
+				`${id} is contributed but extension.ts never names it — the view renders permanently empty with no error`,
 			);
 		}
 	});

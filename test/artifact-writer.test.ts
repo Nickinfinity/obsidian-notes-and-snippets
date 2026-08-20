@@ -11,6 +11,29 @@ import { writeArtifact } from '../src/services/artifact-writer.service.js';
  * it uses in production.
  */
 
+/**
+ * Lists every path under `root`, relative and sorted — a comparable snapshot
+ * of a directory tree.
+ *
+ * @param root - Absolute directory to walk.
+ * @returns Sorted relative paths of every entry beneath `root`.
+ *
+ * @example
+ * treeOf('/tmp/vault'); // → ['Templates', 'Templates/Sub']
+ */
+function treeOf(root: string): string[] {
+    const out: string[] = [];
+    const walk = (dir: string, prefix: string): void => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+            out.push(rel);
+            if (entry.isDirectory()) { walk(path.join(dir, entry.name), rel); }
+        }
+    };
+    walk(root, '');
+    return out.sort((a, b) => a.localeCompare(b));
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
@@ -87,6 +110,84 @@ suite('writeArtifact', () => {
         });
         assert.strictEqual(result.kind, 'success');
         assert.ok(result.filePath.endsWith('my-snippet.md'));
+    });
+
+    test('a fileName carrying a subdirectory writes it — workspace.fs.writeFile mkdirps', async () => {
+        // Settles an open question rather than asserting a preference (ledger #71):
+        // T12 passes `fileName: plan.links[i]`, which legitimately carries a
+        // separator (`sub/b`). Whether that needs the parent created first was
+        // assumed both ways and checked by nobody — the existing nested test
+        // below pre-creates its directory, so the suite never asked. It does now.
+        const vaultRoot = makeTmpDir();
+        const chosenDir = vscode.Uri.joinPath(vaultRoot, 'Templates');
+        await vscode.workspace.fs.createDirectory(chosenDir);
+
+        const result = await writeArtifact({
+            vaultRoot,
+            type: 'Template',
+            chosenDir,
+            fileName: 'sub/nested',      // `sub` deliberately does NOT exist
+            content: 'x',
+        });
+
+        assert.strictEqual(result.kind, 'success');
+        assert.strictEqual(
+            await readFile(vscode.Uri.joinPath(chosenDir, 'sub', 'nested.md')),
+            'x',
+        );
+    });
+
+    test('rejects a fileName that escapes chosenDir', async () => {
+        // The directory guard (step 1) does not cover the final path: step 3
+        // joins an UNVALIDATED `fileName`, and `Uri.joinPath` normalises `..`.
+        // Unreachable through today's callers, which all guard upstream — but
+        // the writer is the authority, so the rule belongs here (ledger #72).
+        // The escape target stays INSIDE this run's fresh temp dir on purpose:
+        // an earlier draft aimed it at `dirname(vaultRoot)` — the shared
+        // `os.tmpdir()` — where the file written by its own pre-guard red run
+        // survived and made the rerun fail for the wrong reason. A negative
+        // filesystem assertion is only meaningful in a directory this test owns.
+        const vaultRoot = makeTmpDir();
+        const chosenDir = vscode.Uri.joinPath(vaultRoot, 'Templates', 'Sub');
+        await vscode.workspace.fs.createDirectory(chosenDir);
+
+        const result = await writeArtifact({
+            vaultRoot,
+            type: 'Template',
+            chosenDir,
+            fileName: '../../evil',      // resolves to <vaultRoot>/evil.md — outside chosenDir
+            content: 'pwned',
+        });
+
+        assert.strictEqual(result.kind, 'error');
+        assert.ok(!fs.existsSync(path.join(vaultRoot.fsPath, 'evil.md')));
+    });
+
+    test('no hostile fileName leaves anything on disk — the sink, not the checker', async () => {
+        // The rule this pins (ledger #74): a rejection test must assert the
+        // SINK, not the checker's return value. `kind === 'error'` only proves
+        // the checker fired — it passes whether the checker inspected the right
+        // value or the wrong one, which is how four of this branch's five
+        // containment defects stayed green. A tree snapshot cannot be fooled
+        // that way: a check on the wrong value always lets *something* land.
+        const hostile = ['../../evil', '../evil', 'sub/../../evil', './../evil'];
+
+        for (const fileName of hostile) {
+            const vaultRoot = makeTmpDir();
+            const chosenDir = vscode.Uri.joinPath(vaultRoot, 'Templates', 'Sub');
+            await vscode.workspace.fs.createDirectory(chosenDir);
+            const before = JSON.stringify(treeOf(vaultRoot.fsPath));
+
+            const result = await writeArtifact({
+                vaultRoot, type: 'Template', chosenDir, fileName, content: 'pwned',
+            });
+
+            assert.strictEqual(result.kind, 'error', `"${fileName}" was not rejected`);
+            assert.strictEqual(
+                JSON.stringify(treeOf(vaultRoot.fsPath)), before,
+                `"${fileName}" was rejected but still changed the tree`,
+            );
+        }
     });
 
     test('chosenDir is honoured for nested subdirectory', async () => {

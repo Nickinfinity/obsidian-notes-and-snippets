@@ -283,15 +283,25 @@ export function applyCarryOver(vars: ParsedVar[], carry: CarryOver): ParsedVar[]
  * Pure, so the exact wording is asserted rather than eyeballed in a manual
  * F5 pass.
  *
+ * `label` is **defaulted**, so every existing caller and its assertions stay
+ * byte-identical; the create-index batch (T12) passes `'Create index'` so it
+ * does not announce itself as a multi-template run. This defaulted parameter
+ * is the sole sanctioned edit to this file outside its own feature.
+ *
  * @param tally - The run's final counts.
+ * @param label - Prefix naming which kind of run is reporting.
  * @returns The notification text.
  *
  * @example
  * summariseRun({ written: 3, skipped: 0, aborted: false });
  * // → 'Multi-Template: 3 files written, 0 skipped.'
+ *
+ * @example
+ * summariseRun({ written: 2, skipped: 1, aborted: false }, 'Create index');
+ * // → 'Create index: 2 files written, 1 skipped.'
  */
-export function summariseRun(tally: RunTally): string {
+export function summariseRun(tally: RunTally, label = 'Multi-Template'): string {
     const fileWord = tally.written === 1 ? 'file' : 'files';
     const suffix = tally.aborted ? ' Run cancelled.' : '';
-    return `Multi-Template: ${tally.written} ${fileWord} written, ${tally.skipped} skipped.${suffix}`;
+    return `${label}: ${tally.written} ${fileWord} written, ${tally.skipped} skipped.${suffix}`;
 }
