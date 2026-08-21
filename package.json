@@ -89,6 +89,60 @@
       {
         "command": "obsidian-artifacts.create.templates.index",
         "title": "Obsidian Artifacts: Create Template Index from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.variables.newFile",
+        "title": "New Variables File",
+        "category": "Obsidian Artifacts",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.newSubSet",
+        "title": "New Sub-Set",
+        "category": "Obsidian Artifacts",
+        "icon": "$(add)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.addVar",
+        "title": "Add Variable",
+        "category": "Obsidian Artifacts",
+        "icon": "$(add)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.editValue",
+        "title": "Edit Value",
+        "category": "Obsidian Artifacts",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.renameVar",
+        "title": "Rename Variable",
+        "category": "Obsidian Artifacts",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.deleteVar",
+        "title": "Delete Variable",
+        "category": "Obsidian Artifacts",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.deleteSubSet",
+        "title": "Delete Sub-Set",
+        "category": "Obsidian Artifacts",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.deleteFile",
+        "title": "Delete Variables File",
+        "category": "Obsidian Artifacts",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.renameSubSet",
+        "title": "Rename Sub-Set",
+        "category": "Obsidian Artifacts",
+        "icon": "$(edit)"
       }
     ],
     "submenus": [
@@ -133,6 +187,42 @@
         },
         {
           "command": "obsidian-artifacts.create.templates.index",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.newFile",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.newSubSet",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.addVar",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.editValue",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameVar",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteVar",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteSubSet",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteFile",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameSubSet",
           "when": "false"
         }
       ],
@@ -353,6 +443,55 @@
           "when": "listMultiSelection && obsidian-artifacts.templatesActive",
           "group": "3_create@2"
         }
+      ],
+      "view/title": [
+        {
+          "command": "obsidian-artifacts.variables.newFile",
+          "when": "view == obsidian-artifacts.variablesView",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "obsidian-artifacts.variables.newSubSet",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == file",
+          "group": "inline@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteFile",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == file",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "obsidian-artifacts.variables.addVar",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == subset",
+          "group": "inline@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameSubSet",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == subset",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteSubSet",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == subset",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "obsidian-artifacts.variables.editValue",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == var",
+          "group": "inline@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameVar",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == var",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteVar",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == var",
+          "group": "1_modify@2"
+        }
       ]
     },
     "viewsContainers": {
@@ -422,7 +561,7 @@
         "obsidianArtifacts.features.templates": {
           "type": "boolean",
           "default": false,
-          "description": "Enable the Templates directory (Explorer context menu \u2014 Insert Template)."
+          "description": "Enable the Templates directory (Explorer context menu — Insert Template)."
         },
         "obsidianArtifacts.features.aiprompts": {
           "type": "boolean",

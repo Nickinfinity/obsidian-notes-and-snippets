@@ -5,8 +5,21 @@ import { getVaultRootUri } from '../../services/config.service.js';
 import { getEntry } from '../../services/artifact-type-config.service.js';
 import type { ParsedArtifactFile } from '../../types/parsed-artifact.types.js';
 
-/** The three levels of the Variables tree, in display order. */
-export type VariableNodeKind = 'file' | 'subset' | 'var';
+/**
+ * The three levels of the Variables tree, in display order.
+ *
+ * A runtime array with the type **derived from it**, rather than a bare union:
+ * these values are also `TreeItem.contextValue`s, which `package.json`'s
+ * `view/item/context` `when` clauses match on — and a `when` naming a value no
+ * node produces renders **no menu entry**, silently. A type alone cannot be
+ * enumerated at runtime, so the guard that pins the manifest to these kinds
+ * (`package-variables-menus.test.ts`) needs the array to exist. One
+ * declaration, both uses.
+ */
+export const VARIABLE_NODE_KINDS = ['file', 'subset', 'var'] as const;
+
+/** One of the three tree levels — derived from `VARIABLE_NODE_KINDS`, never re-spelled. */
+export type VariableNodeKind = typeof VARIABLE_NODE_KINDS[number];
 
 /**
  * Max characters shown for a var's value before it is truncated with `…`.

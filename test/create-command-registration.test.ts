@@ -82,6 +82,30 @@ suite('create surface registration — extension host', () => {
 		}
 	});
 
+	test('every contributed variables command is actually registered', async () => {
+		// #52's lesson, applied to Wave 6: the manifest guard proves the nine ids
+		// are *declared*, and stays green whether or not anything registered them.
+		// A menu entry pointing at an unregistered id raises "command not found"
+		// only when the user clicks it — which, for a delete command, is the worst
+		// possible moment to discover it.
+		const ext = vscode.extensions.all.find(e => e.packageJSON?.name === 'obsidian-notes-and-snippets');
+		await ext?.activate();
+
+		const declared = (ext?.packageJSON?.contributes?.commands ?? []) as { command: string }[];
+		const variableIds = declared
+			.map(c => c.command)
+			.filter(id => id.startsWith('obsidian-artifacts.variables.'));
+		assert.ok(variableIds.length > 0, 'no variables commands contributed');
+
+		const registered = await vscode.commands.getCommands(true);
+		for (const id of variableIds) {
+			assert.ok(
+				registered.includes(id),
+				`${id} is contributed but never registered — its menu item raises "command not found" on click`,
+			);
+		}
+	});
+
 	test('every contributed tree view is registered in extension.ts', () => {
 		// A *static* check, deliberately, and the limitation is the point:
 		// `registerTreeDataProvider` silently REPLACES an existing provider

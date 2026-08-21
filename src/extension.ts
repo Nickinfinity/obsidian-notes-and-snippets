@@ -7,6 +7,7 @@ import { createVaultDirectory } from './services/vault.service.js';
 import { registerCreateSurfaceCommands } from './commands/create-from-surface.command.js';
 import { MainViewProvider } from './ui/views/mainView.provider.js';
 import { VariablesViewProvider } from './ui/views/variablesView.provider.js';
+import { registerVariablesCommands } from './commands/variables.command.js';
 import { sweepOrphans } from './services/scratch-file.service.js';
 import { SCRATCH_SUBDIR as FORM_BLOCK_SUBDIR } from './ui/panels/artifactForm/blockExpand.js';
 import { BLOCK_EDIT_SUBDIR } from './ui/panels/artifactPicker/blockEditor.js';
@@ -40,6 +41,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		),
 	);
 
+	const variablesProvider = new VariablesViewProvider();
+
 	// The Variables tree. Read-only this wave; T16 (Wave 6) adds the CRUD
 	// commands that call `refresh()`. Registered here for the same reason the
 	// main pane is: a contributed view with no provider renders as a permanently
@@ -47,9 +50,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.window.registerTreeDataProvider(
 			VariablesViewProvider.viewType,
-			new VariablesViewProvider(),
+			variablesProvider,
 		),
 	);
+
+	// Variables CRUD commands. Registered after the tree provider above, so the
+	// refresh callback they fire always has a provider to reach.
+	registerVariablesCommands(context, variablesProvider);
 
 	// Clean up scratch files orphaned by a previous crash / hard-close, through
 	// the one scratch-file authority. Both subdirs are now owned by the service
