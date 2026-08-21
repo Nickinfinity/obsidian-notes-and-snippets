@@ -609,17 +609,39 @@ variable-set flow — one table, not two):
 
 ---
 
-## Writing a Plan
+## Writing a Plan — and running one
 
-> **Read [`CREATING_A_PLAN.md`](CREATING_A_PLAN.md) before writing any plan**
-> — a multi-phase feature breakdown, a multi-agent dispatch, or anything that
-> lands under `docs/plans/`. It is the **process** authority; a plan under
+**Two different jobs, two different files. Do not confuse them.**
+
+> **Writing a plan → read [`CREATING_A_PLAN.md`](CREATING_A_PLAN.md) first.**
+> A multi-phase feature breakdown, a multi-agent dispatch, or anything that lands
+> under `docs/plans/`. It is the **authoring** authority; a plan under
 > `docs/plans/<feature-slug>/` is one instance of it.
 >
 > It owns: where plan files live and why they never merge (`git rm -r docs` is
 > the last commit before the PR), the orchestrator/reviewer/worker topology and
-> their verbatim prompt templates, the mandatory skills, the six-field task
+> their prompt templates, the dispatch mechanics (workers `sonnet`, reviewer and
+> orchestrator `opus`, named on **every** spawn), the mandatory skills, the task
 > spec, the gate command, the ledger format, and the plan's definition of done.
+
+> **Running a plan → read the plan, and nothing else.**
+> **Every plan in this repo is self-contained by construction**
+> (`CREATING_A_PLAN.md` §5.2): it ends with an **execution appendix** carrying the
+> role prompt templates verbatim, the dispatch mechanics, the gate, the review
+> loop, the commit-and-push policy, the skills table and the static-analysis rule.
+> An orchestrator that has never opened `CREATING_A_PLAN.md` can run it.
+>
+> **Do not send an executing agent to `CREATING_A_PLAN.md`.** It is ~550 lines of
+> guidance about a job that is already finished, and it invites re-deriving
+> decisions the plan has already made and recorded. If something needed to execute
+> is missing from the plan, that is a **bug in the plan** — fix it there. The only
+> agent that opens the authoring file after authoring is one whose task is to edit
+> it.
+>
+> A plan's three files — `plan.md`, `progress.md`, `jira-tickets.md` — are one
+> document in three projections (specification · ledger · external contract). All
+> three are read before dispatch, and a change to one propagates to all three;
+> `docs/` is gitignored, so no diff or CI will ever catch a divergence.
 >
 > Two standing rules from it that bind work outside a plan too:
 > **static analysis runs through the *SonarQube for IDE* (SonarLint) VS Code
