@@ -130,37 +130,3 @@ ${styleLinkTags(cssUris)}
 </body>
 </html>`;
 }
-
-/**
- * Renders the empty preview-mode placeholder.
- *
- * The main pane is one webview with two modes (`idle` | `preview`); `preview`
- * lands in Wave 7. This is the seam `MainViewProvider.setMode('preview')`
- * switches to today — no content beyond the shared stylesheets, so the CSP
- * declares only what those stylesheets need: linked styles and (via
- * `codicon.css`'s `@font-face`) the vendored font. No `script-src` — the
- * placeholder has no `<script>` tag, and `default-src 'none'` already blocks
- * one if it appeared.
- *
- * @param cssUris   - Webview URIs for the stylesheets — `base.css` first.
- * @param cspSource - Webview CSP source token (`webview.cspSource`).
- * @returns Complete HTML document string for `webview.html`.
- *
- * @example
- * renderPreviewPlaceholderHtml([baseCssUri], webview.cspSource)
- */
-export function renderPreviewPlaceholderHtml(
-    cssUris: string | string[],
-    cspSource: string,
-): string {
-    return /* html */`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src ${cspSource}; font-src ${cspSource};">
-${styleLinkTags(cssUris)}
-</head>
-<body class="popup-body"></body>
-</html>`;
-}

@@ -5,7 +5,7 @@ import { registerMigrateCommand } from './commands/migrate.command.js';
 import { refreshVaultContext } from './services/context.service.js';
 import { createVaultDirectory } from './services/vault.service.js';
 import { registerCreateSurfaceCommands } from './commands/create-from-surface.command.js';
-import { MainViewProvider } from './ui/views/mainView.provider.js';
+import { MainViewProvider, setMainViewProvider } from './ui/views/mainView.provider.js';
 import { VariablesViewProvider } from './ui/views/variablesView.provider.js';
 import { registerVariablesCommands } from './commands/variables.command.js';
 import { sweepOrphans } from './services/scratch-file.service.js';
@@ -33,12 +33,18 @@ export async function activate(context: vscode.ExtensionContext) {
 	// The main pane. Registered without a `when` on the view itself (package.json):
 	// a view that fails its `when` is dropped, and a container whose views are all
 	// dropped leaves the activity bar entirely — taking its viewsWelcome with it.
+	const mainViewProvider = new MainViewProvider(context.extensionUri);
+	// The picker reaches the pane through this accessor rather than a seventh
+	// `openArtifactPicker` parameter threaded through four call sites — the same
+	// idiom `varsetPicker.panel.ts`'s `getVarSetScanner()` already uses.
+	setMainViewProvider(mainViewProvider);
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(
 			MainViewProvider.viewType,
-			new MainViewProvider(context.extensionUri),
+			mainViewProvider,
 			{ webviewOptions: { retainContextWhenHidden: true } },
 		),
+		new vscode.Disposable(() => setMainViewProvider(undefined)),
 	);
 
 	const variablesProvider = new VariablesViewProvider();
