@@ -462,3 +462,36 @@ suite('serializeArtifact — YAML safety: newline strip', () => {
         assert.ok(!content.includes('vks'), 'vks fence should not be emitted for empty defaults');
     });
 });
+
+suite('empty sub-set round-trip — a heading always gets a fence', () => {
+    /**
+     * `parse(serialize(x)) ≅ x` for a Variables block with no vars.
+     *
+     * `vksFence` returned `''` for an empty `vars` array, so a `## Heading`
+     * was emitted with nothing under it — and `parseBlocks` requires a fence
+     * after a heading, so the sub-set was **dropped on re-parse**. Reached two
+     * ways, both destructive: creating a sub-set before its first variable,
+     * and `deleteVar` removing a sub-set's last one. The heading stayed
+     * stranded in the user's file while the sub-set vanished from the tree.
+     *
+     * The empty fence itself was never the problem — it parses back cleanly as
+     * `vars: []`. Only the emission was wrong (ledger #95).
+     */
+    test('a sub-set with no vars survives serialize → parse', () => {
+        const model: ArtifactFormModel = {
+            artifactType: 'Variables',
+            title: 'Dev',
+            description: '',
+            tags: [],
+            blocks: [
+                { heading: 'Alpha', description: '', language: '', code: '', vars: [{ name: 'VK-a', defaultValue: '1' }] },
+                { heading: 'Fresh', description: '', language: '', code: '', vars: [] },
+            ],
+        };
+
+        const back = parseFromContent(serializeArtifact(model), '/v/Variables/dev.md', '/v/Variables');
+
+        assert.deepStrictEqual(back.blocks.map(b => b.heading), ['Alpha', 'Fresh']);
+        assert.deepStrictEqual(back.blocks[1]?.vars, []);
+    });
+});

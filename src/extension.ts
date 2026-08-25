@@ -1,11 +1,16 @@
 import * as vscode from 'vscode';
 import { registerOpenSettingsCommand } from './commands/openSettings.command.js';
 import { registerInsertCommands } from './commands/insert.command.js';
-import { registerCreateCommands } from './commands/create.command.js';
 import { registerMigrateCommand } from './commands/migrate.command.js';
 import { refreshVaultContext } from './services/context.service.js';
 import { createVaultDirectory } from './services/vault.service.js';
-import { sweepBlockEditOrphans } from './ui/panels/artifactPicker/blockEditor.js';
+import { registerCreateSurfaceCommands } from './commands/create-from-surface.command.js';
+import { MainViewProvider, setMainViewProvider } from './ui/views/mainView.provider.js';
+import { VariablesViewProvider } from './ui/views/variablesView.provider.js';
+import { registerVariablesCommands } from './commands/variables.command.js';
+import { sweepOrphans } from './services/scratch-file.service.js';
+import { SCRATCH_SUBDIR as FORM_BLOCK_SUBDIR } from './ui/panels/artifactForm/blockExpand.js';
+import { BLOCK_EDIT_SUBDIR } from './ui/panels/artifactPicker/blockEditor.js';
 import { ARTIFACTS } from './types/constants.js';
 import { CONFIG_SECTION, getVaultPath } from './services/config.service.js';
 
@@ -22,11 +27,50 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Register commands first so executeCommand calls below resolve correctly
 	registerOpenSettingsCommand(context);
 	registerInsertCommands(context);
-	registerCreateCommands(context);
+	registerCreateSurfaceCommands(context);
 	registerMigrateCommand(context);
 
-	// Clean up any block-edit temp files orphaned by a previous crash / hard-close.
-	void sweepBlockEditOrphans(context.storageUri ?? context.globalStorageUri);
+	// The main pane. Registered without a `when` on the view itself (package.json):
+	// a view that fails its `when` is dropped, and a container whose views are all
+	// dropped leaves the activity bar entirely — taking its viewsWelcome with it.
+	const mainViewProvider = new MainViewProvider(context.extensionUri);
+	// The picker reaches the pane through this accessor rather than a seventh
+	// `openArtifactPicker` parameter threaded through four call sites — the same
+	// idiom `varsetPicker.panel.ts`'s `getVarSetScanner()` already uses.
+	setMainViewProvider(mainViewProvider);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(
+			MainViewProvider.viewType,
+			mainViewProvider,
+			{ webviewOptions: { retainContextWhenHidden: true } },
+		),
+		new vscode.Disposable(() => setMainViewProvider(undefined)),
+	);
+
+	const variablesProvider = new VariablesViewProvider();
+
+	// The Variables tree. Read-only this wave; T16 (Wave 6) adds the CRUD
+	// commands that call `refresh()`. Registered here for the same reason the
+	// main pane is: a contributed view with no provider renders as a permanently
+	// empty pane and reports nothing anywhere (ledger #52).
+	context.subscriptions.push(
+		vscode.window.registerTreeDataProvider(
+			VariablesViewProvider.viewType,
+			variablesProvider,
+		),
+	);
+
+	// Variables CRUD commands. Registered after the tree provider above, so the
+	// refresh callback they fire always has a provider to reach.
+	registerVariablesCommands(context, variablesProvider);
+
+	// Clean up scratch files orphaned by a previous crash / hard-close, through
+	// the one scratch-file authority. Both subdirs are now owned by the service
+	// and named by their owning module — no literal spelled here.
+	const storageUri = context.storageUri ?? context.globalStorageUri;
+	for (const subdir of [BLOCK_EDIT_SUBDIR, FORM_BLOCK_SUBDIR]) {
+		void sweepOrphans(storageUri, subdir);
+	}
 
 	// Await context key setup — ensures menus reflect vault state before first user interaction.
 	// Without await the keys land asynchronously and the first right-click may show no items.

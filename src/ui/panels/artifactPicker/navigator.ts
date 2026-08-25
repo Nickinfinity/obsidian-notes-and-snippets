@@ -6,6 +6,9 @@ import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js
 import { out } from './shared.js';
 import { ArtifactItem, buildItem, PREVIEW_DEBOUNCE_MS } from './navigator.helpers.js';
 import { PreviewPanelController, blockAsArtifact } from './preview.js';
+import { WebviewHost } from './webviewHost.js';
+import { getMainViewProvider, type MainViewProvider } from '../../views/mainView.provider.js';
+import { ensureView } from '../../views/mainView.preview.js';
 import type { InvocationSurface } from './preview.helpers.js';
 import { getVaultRootUri } from '../../../services/config.service.js';
 import { forcesSingleBlock } from '../../../services/artifact-type-config.service.js';
@@ -39,6 +42,27 @@ import { chooseStepDestination } from './multiIndex.dest.js';
  * @example
  * await openArtifactPicker('Templates', 'Templates', context.extensionUri, storageUri, clickedUri, 'editor');
  */
+/**
+ * The registered main pane, or a thrown error naming why it is absent.
+ *
+ * The pane is the preview's only host now that the editor-column popup is
+ * gone, so a missing provider is an activation defect, not a state the
+ * preview can degrade through — failing loudly beats rendering nowhere.
+ *
+ * @returns The registered `MainViewProvider`.
+ * @throws When `extension.ts` has not registered one.
+ *
+ * @example
+ * requirePane().endPreview();
+ */
+function requirePane(): MainViewProvider {
+    const pane = getMainViewProvider();
+    if (!pane) {
+        throw new Error('main pane provider is not registered — extension activation did not complete');
+    }
+    return pane;
+}
+
 export async function openArtifactPicker(
     artifactDir: string,
     artifactName: string,
@@ -78,6 +102,8 @@ class ArtifactNavigator {
     private readonly parseCache = new Map<string, ParsedArtifactFile>();
     private readonly refreshedUris = new Set<string>();
     private readonly preview: PreviewPanelController;
+    /** One transport per picker session; re-attached whenever the pane resolves. */
+    private readonly host = new WebviewHost();
 
     private currentDir: vscode.Uri;
     private readonly dirStack: vscode.Uri[] = [];
@@ -115,6 +141,17 @@ class ArtifactNavigator {
             setCache:     (uri, parsed) => { this.parseCache.set(uri.toString(), parsed); },
             onDispose:    () => { /* preview self-cleans; navigator has no extra work */ },
             closePicker:  () => this.qp.hide(),
+            host:         this.host,
+            ensureView:   async () => {
+                const pane = requirePane();
+                await ensureView(pane.viewTarget());
+                const target = pane.hostTarget();
+                if (!target) { throw new Error('main pane resolved but exposed no host target'); }
+                this.host.attachTarget(target);
+            },
+            endPreview:       () => { getMainViewProvider()?.endPreview(); },
+            showPreviewState: state => { requirePane().showPreview(state); },
+            onWebviewMessage: handler => requirePane().onWebviewMessage(handler),
             storageUri,
             destUri,
             invocationSurface: this.invocationSurface,

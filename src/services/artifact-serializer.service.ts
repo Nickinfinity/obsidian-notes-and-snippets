@@ -156,10 +156,28 @@ function serializeVariablesBody(model: ArtifactFormModel, isMultiBlock: boolean)
     return model.blocks
         .map(b => {
             const descLine = b.description !== '' ? `${b.description}\n` : '';
-            return `\n## ${b.heading}\n${descLine}${vksFence(b.vars)}`;
+            // A heading ALWAYS gets a fence, even with no vars. `parseBlocks`
+            // requires one, so a bare `## Heading` is dropped on re-parse while
+            // the heading stays stranded in the user's file — the sub-set
+            // vanishes from the tree and the text remains. Reached two ways,
+            // both destructive: a sub-set created before its first variable,
+            // and `deleteVar` removing a sub-set's last one. The empty fence
+            // parses back cleanly as `vars: []`; only the emission was wrong.
+            // `vksFence` itself keeps returning '' for empty — its other
+            // caller (`serializeVks`) must NOT emit a bare `vars:` fence for a
+            // var-less snippet block. Guarded by "empty sub-set round-trip".
+            return `\n## ${b.heading}\n${descLine}${b.vars.length === 0 ? EMPTY_VKS_FENCE : vksFence(b.vars)}`;
         })
         .join('');
 }
+
+/**
+ * The `vks` fence emitted for a sub-set that has no variables yet.
+ *
+ * Distinct from `vksFence([])`, which returns `''` — see the comment in
+ * `serializeVariablesBody` for why the two callers need different answers.
+ */
+const EMPTY_VKS_FENCE = '\n```vks\n```\n';
 
 /**
  * Emits a bare ` ```vks ` fence for the given vars, values verbatim.

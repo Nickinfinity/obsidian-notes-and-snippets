@@ -71,6 +71,20 @@ export interface Artifact {
 	 * write-vs-insert set stays derived from this table (`writesWholeFile`).
 	 */
 	writesFile?: boolean;
+	/**
+	 * Which `ArtifactFormModel` key supplies this type's **output filename**.
+	 * Set on exactly the `writesFile` types, and meaningless without one:
+	 * `'target'` is the filename verbatim (`AIAgentsConfig` — `CLAUDE.md`),
+	 * `'extension'` feeds the D3 precedence chain instead (`Template`).
+	 *
+	 * Declared here, next to `writesFile`, for the same reason `writesFile`
+	 * is: it keeps `CLAUDE.md`'s promise that a third whole-file type is a
+	 * `constants.ts` row plus one branch in `resolveOutputFileName` literally
+	 * true. Read through `getFilenameField`; `filename-field.test.ts` binds
+	 * the two flags so a `writesFile` row that forgets this key fails loudly
+	 * instead of scaffolding extension-less files.
+	 */
+	outputNameKey?: 'target' | 'extension';
 	/** Per-type form behaviour — required when `createForm === true`. */
 	form?: ArtifactTypeFormConfig;
 }

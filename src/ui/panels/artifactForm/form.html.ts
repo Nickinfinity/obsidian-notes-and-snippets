@@ -201,15 +201,19 @@ function buildOptionalTextField(id: string, label: string, value: string | undef
 }
 
 /**
- * Builds the AI-provenance fields — **agents only**. `provider`, `model`, and
- * `version` are agent-specific frontmatter keys, so the inputs appear for no
- * other type; every other type gets an empty string here and never posts them.
+ * Builds the agent-only fields. `target`, `provider`, `model` and `version` are
+ * agent-specific frontmatter keys, so the inputs appear for no other type; every
+ * other type gets an empty string here and never posts them.
+ *
+ * `target` leads because it is the one that decides the **written file's name**
+ * (verbatim — `resolveAgentFileName` never appends an extension); the other
+ * three are provenance only.
  *
  * Rendered through the same `buildOptionalTextField` the template-only
  * `extension` key uses, so the markup and the `escHtml` seeding of these
  * webview-bound values are literally the same code, not a parallel copy.
  *
- * @param model - Form model (its `type` gates the fields, the three keys seed them).
+ * @param model - Form model (its `type` gates the fields, the four keys seed them).
  * @returns The agent form-section HTML, or `''` for non-agent types.
  *
  * @example
@@ -218,7 +222,8 @@ function buildOptionalTextField(id: string, label: string, value: string | undef
  */
 function buildAgentFieldsSection(model: ArtifactFormModel): string {
     if (model.artifactType !== 'AIAgentsConfig') { return ''; }
-    return buildOptionalTextField('provider', 'Provider', model.provider, 'e.g. Claude')
+    return buildOptionalTextField('target', 'Target file name', model.target, 'e.g. CLAUDE.md — used verbatim')
+        + buildOptionalTextField('provider', 'Provider', model.provider, 'e.g. Claude')
         + buildOptionalTextField('model', 'Model', model.model, 'e.g. Opus')
         + buildOptionalTextField('version', 'Version', model.version, 'e.g. 4.8');
 }

@@ -63,6 +63,14 @@ export interface ArtifactFormModel {
      */
     extension?: string;
     /**
+     * Output file name — **`artifactType: AIAgentsConfig` only**. Emitted as
+     * frontmatter `target:` when non-empty, and used **verbatim** as the written
+     * file's name (`CLAUDE.md`, `.cursorrules`) — never extension-appended, which
+     * is exactly what separates it from `extension:` above. Absent/empty for
+     * every other type.
+     */
+    target?: string;
+    /**
      * AI provider — **`type: agent` only**. Emitted as frontmatter `provider:`
      * when non-empty (single-line enforced). Absent/empty for every other type.
      */
@@ -74,3 +82,38 @@ export interface ArtifactFormModel {
     /** Content blocks — at least one entry is always required. */
     blocks: ArtifactFormBlock[];
 }
+
+/**
+ * What a surface capture produced, or `undefined` when there was nothing to
+ * capture.
+ *
+ * §2.1 promises "one `CaptureFn` contract, three implementations". That is only
+ * true if all three return the **same shape**, so it is declared once, here,
+ * before any capture is written. A capture returning a bare
+ * `Partial<ArtifactFormModel>`, or a bespoke `{ text, usedClipboard }` object,
+ * is the defect this type exists to prevent.
+ *
+ * @example
+ * const r: CaptureResult = { prefill: { blocks: [block] }, source: 'selection' };
+ */
+export interface CaptureResult {
+    /** Prefill handed straight to `openArtifactFormPanel`. */
+    readonly prefill: Partial<ArtifactFormModel>;
+    /**
+     * Where the text came from — drives the caller's toast, never the form.
+     * `'clipboard'` **requires** the "used clipboard contents" message: a
+     * clipboard read is never silent.
+     */
+    readonly source: 'selection' | 'clipboard' | 'file';
+}
+
+/**
+ * One surface's capture strategy. `undefined` is the single "nothing to
+ * capture" signal for every surface — the caller shows a toast and opens no
+ * form.
+ *
+ * @example
+ * const captureEditor: CaptureFn<{ text: string; languageId: string }> =
+ *     (input, type) => input.text ? { prefill: {}, source: 'selection' } : undefined;
+ */
+export type CaptureFn<TInput> = (input: TInput, type: ArtifactType) => CaptureResult | undefined;

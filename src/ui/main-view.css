@@ -1,0 +1,37 @@
+/*
+ * Narrow-pane overrides for the sidebar preview (T22, VSX-223).
+ *
+ * A sidebar pane is ~300px wide against an editor column's ~800px.
+ * `picker.css` and `code-block.css` already carry the base rules (colours,
+ * spacing, the code area itself); this sheet adds only what the narrow
+ * width needs on top of them, so it must load after both.
+ *
+ * No overflow rule here by design: `code-block.css` sets
+ * `.code-block-wrapper { overflow-y: auto }`, and per CSS Overflow 3 a
+ * computed `visible` on one axis alongside `auto` on the other computes to
+ * `auto` — so `overflow-x` is already `auto` before this sheet loads.
+ * `.code-content` is also `pre-wrap` + `break-all`, so horizontal overflow
+ * is unreachable at any width regardless.
+ */
+
+.popup-body {
+  padding: 12px 14px 18px;
+}
+
+.input-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.input-row label {
+  min-width: 0;
+}
+
+.actions {
+  flex-direction: column;
+}
+
+.btn {
+  width: 100%;
+}

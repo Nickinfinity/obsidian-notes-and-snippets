@@ -42,6 +42,7 @@ export const ARTIFACTS: ArtifactsArray = [
 		// Invoking an agent config writes the whole file (named from `target:`),
 		// exactly like a template — same flag, one shared code path.
 		writesFile: true,
+		outputNameKey: 'target',
 		// D4: agent reuses the multi-block form machinery (matches ARTIFACT_FILE_FORMAT.md §5).
 		// `free` language mirrors snippet/template; provider/model/version are agent-only
 		// frontmatter keys rendered by buildAgentFieldsSection, not a language concern.
@@ -75,6 +76,7 @@ export const ARTIFACTS: ArtifactsArray = [
 		contexts: ['explorer'],
 		createForm: true,
 		writesFile: true,
+		outputNameKey: 'extension',
 		form: {
 			language: { mode: 'free', default: '' },
 			label: { singular: 'template' },

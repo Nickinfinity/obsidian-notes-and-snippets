@@ -5,9 +5,6 @@ import type { ArtifactContext } from '../../../types/artifact.types.js';
 import type { ArtifactType, ParsedArtifactFile, ParsedBlock } from '../../../types/parsed-artifact.types.js';
 import { styleLinkTags } from '../../../utils/html.js';
 
-/** WebviewPanel viewType used for both the read-only preview and the interactive popup. */
-export const POPUP_VIEW_TYPE = 'obsidianArtifactPopupPreview';
-
 /**
  * Converts a `VK-xxx` variable name to a human-readable input label.
  *

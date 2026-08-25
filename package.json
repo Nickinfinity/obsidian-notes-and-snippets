@@ -55,20 +55,94 @@
         "title": "See/Edit Variables"
       },
       {
-        "command": "obsidian-artifacts.create",
-        "title": "Obsidian Artifacts: Create Artifact"
-      },
-      {
         "command": "obsidian-artifacts.migrateFrontmatter",
         "title": "Obsidian Artifacts: Migrate Vault Frontmatter"
       },
       {
-        "command": "obsidian-artifacts.create.fromSelection.snippet",
+        "command": "obsidian-artifacts.create.snippets",
         "title": "Obsidian Artifacts: Create Snippet from Selection"
       },
       {
-        "command": "obsidian-artifacts.create.fromSelection.command",
-        "title": "Obsidian Artifacts: Create Command from Selection"
+        "command": "obsidian-artifacts.create.aiagentsconf",
+        "title": "Obsidian Artifacts: Create AI Agents Config from File"
+      },
+      {
+        "command": "obsidian-artifacts.create.commands",
+        "title": "Obsidian Artifacts: Create Command from Terminal"
+      },
+      {
+        "command": "obsidian-artifacts.create.templates",
+        "title": "Obsidian Artifacts: Create Template from File"
+      },
+      {
+        "command": "obsidian-artifacts.create.aiprompts",
+        "title": "Obsidian Artifacts: Create AI Prompt from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.create.aiprompts.terminal",
+        "title": "Obsidian Artifacts: Create AI Prompt from Terminal"
+      },
+      {
+        "command": "obsidian-artifacts.create.aiagentsconf.index",
+        "title": "Obsidian Artifacts: Create AI Agents Config Index from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.create.templates.index",
+        "title": "Obsidian Artifacts: Create Template Index from Selection"
+      },
+      {
+        "command": "obsidian-artifacts.variables.newFile",
+        "title": "New Variables File",
+        "category": "Obsidian Artifacts",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.newSubSet",
+        "title": "New Sub-Set",
+        "category": "Obsidian Artifacts",
+        "icon": "$(add)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.addVar",
+        "title": "Add Variable",
+        "category": "Obsidian Artifacts",
+        "icon": "$(add)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.editValue",
+        "title": "Edit Value",
+        "category": "Obsidian Artifacts",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.renameVar",
+        "title": "Rename Variable",
+        "category": "Obsidian Artifacts",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.deleteVar",
+        "title": "Delete Variable",
+        "category": "Obsidian Artifacts",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.deleteSubSet",
+        "title": "Delete Sub-Set",
+        "category": "Obsidian Artifacts",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.deleteFile",
+        "title": "Delete Variables File",
+        "category": "Obsidian Artifacts",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidian-artifacts.variables.renameSubSet",
+        "title": "Rename Sub-Set",
+        "category": "Obsidian Artifacts",
+        "icon": "$(edit)"
       }
     ],
     "submenus": [
@@ -83,16 +157,72 @@
       {
         "id": "obsidian-artifacts.submenu.explorer",
         "label": "Obsidian Artifacts"
+      },
+      {
+        "id": "obsidian-artifacts.submenu.create.editor",
+        "label": "Obsidian Artifacts: Create"
+      },
+      {
+        "id": "obsidian-artifacts.submenu.create.terminal",
+        "label": "Obsidian Artifacts: Create"
+      },
+      {
+        "id": "obsidian-artifacts.submenu.create.explorer",
+        "label": "Obsidian Artifacts: Create"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "obsidian-artifacts.create",
-          "when": "obsidian-artifacts.vaultConfigured"
+          "command": "obsidian-artifacts.insert.aiprompts.terminal",
+          "when": "false"
         },
         {
-          "command": "obsidian-artifacts.insert.aiprompts.terminal",
+          "command": "obsidian-artifacts.create.aiprompts.terminal",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf.index",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates.index",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.newFile",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.newSubSet",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.addVar",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.editValue",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameVar",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteVar",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteSubSet",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteFile",
+          "when": "false"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameSubSet",
           "when": "false"
         }
       ],
@@ -118,9 +248,19 @@
           "group": "obsidian@1"
         },
         {
-          "command": "obsidian-artifacts.create.fromSelection.snippet",
-          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured",
-          "group": "9_obsidian-artifacts@1"
+          "command": "obsidian-artifacts.create.snippets",
+          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.snippetsActive && !obsidian-artifacts.editorCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts",
+          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.editorCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "submenu": "obsidian-artifacts.submenu.create.editor",
+          "when": "editorHasSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.editorCreateHasMultiple",
+          "group": "3_create@1"
         }
       ],
       "terminal/context": [
@@ -145,9 +285,19 @@
           "group": "obsidian@1"
         },
         {
-          "command": "obsidian-artifacts.create.fromSelection.command",
-          "when": "obsidian-artifacts.vaultConfigured",
-          "group": "9_obsidian-artifacts@1"
+          "command": "obsidian-artifacts.create.commands",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.commandsActive && !obsidian-artifacts.terminalCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts.terminal",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.aipromptsActive && !obsidian-artifacts.terminalCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "submenu": "obsidian-artifacts.submenu.create.terminal",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.terminalCreateHasMultiple",
+          "group": "3_create@1"
         }
       ],
       "explorer/context": [
@@ -170,6 +320,31 @@
           "submenu": "obsidian-artifacts.submenu.explorer",
           "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.explorerHasMultiple",
           "group": "obsidian@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf",
+          "when": "!listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.aiagentsconfActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf.index",
+          "when": "listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.aiagentsconfActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates",
+          "when": "!listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.templatesActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates.index",
+          "when": "listMultiSelection && obsidian-artifacts.vaultConfigured && obsidian-artifacts.templatesActive && !obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@2"
+        },
+        {
+          "submenu": "obsidian-artifacts.submenu.create.explorer",
+          "when": "obsidian-artifacts.vaultConfigured && obsidian-artifacts.explorerCreateHasMultiple",
+          "group": "3_create@1"
         }
       ],
       "obsidian-artifacts.submenu.editor": [
@@ -222,8 +397,137 @@
           "when": "obsidian-artifacts.variablesActive",
           "group": "2_variables@1"
         }
+      ],
+      "obsidian-artifacts.submenu.create.editor": [
+        {
+          "command": "obsidian-artifacts.create.snippets",
+          "when": "obsidian-artifacts.snippetsActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts",
+          "when": "obsidian-artifacts.aipromptsActive",
+          "group": "3_create@2"
+        }
+      ],
+      "obsidian-artifacts.submenu.create.terminal": [
+        {
+          "command": "obsidian-artifacts.create.commands",
+          "when": "obsidian-artifacts.commandsActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiprompts.terminal",
+          "when": "obsidian-artifacts.aipromptsActive",
+          "group": "3_create@2"
+        }
+      ],
+      "obsidian-artifacts.submenu.create.explorer": [
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf",
+          "when": "!listMultiSelection && obsidian-artifacts.aiagentsconfActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates",
+          "when": "!listMultiSelection && obsidian-artifacts.templatesActive",
+          "group": "3_create@2"
+        },
+        {
+          "command": "obsidian-artifacts.create.aiagentsconf.index",
+          "when": "listMultiSelection && obsidian-artifacts.aiagentsconfActive",
+          "group": "3_create@1"
+        },
+        {
+          "command": "obsidian-artifacts.create.templates.index",
+          "when": "listMultiSelection && obsidian-artifacts.templatesActive",
+          "group": "3_create@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "obsidian-artifacts.variables.newFile",
+          "when": "view == obsidian-artifacts.variablesView",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "obsidian-artifacts.variables.newSubSet",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == file",
+          "group": "inline@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteFile",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == file",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "obsidian-artifacts.variables.addVar",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == subset",
+          "group": "inline@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameSubSet",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == subset",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteSubSet",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == subset",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "obsidian-artifacts.variables.editValue",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == var",
+          "group": "inline@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.renameVar",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == var",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "obsidian-artifacts.variables.deleteVar",
+          "when": "view == obsidian-artifacts.variablesView && viewItem == var",
+          "group": "1_modify@2"
+        }
       ]
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "obsidian-artifacts",
+          "title": "Obsidian Artifacts",
+          "icon": "media/obsidian-artifacts.svg"
+        }
+      ]
+    },
+    "views": {
+      "obsidian-artifacts": [
+        {
+          "id": "obsidian-artifacts.mainView",
+          "name": "Artifacts",
+          "type": "webview"
+        },
+        {
+          "id": "obsidian-artifacts.variablesView",
+          "name": "Variables"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "obsidian-artifacts.mainView",
+        "when": "!obsidian-artifacts.vaultConfigured",
+        "contents": "Choose your Obsidian vault to start creating and inserting artifacts.\n[Choose Vault Folder](command:obsidian-artifacts.settings)"
+      },
+      {
+        "view": "obsidian-artifacts.variablesView",
+        "when": "!obsidian-artifacts.vaultConfigured",
+        "contents": "Variable sets live in your vault's Variables folder.\n[Choose Vault Folder](command:obsidian-artifacts.settings)"
+      }
+    ],
     "configuration": {
       "title": "Obsidian Artifacts: AI Snippets & Tools",
       "properties": {
@@ -286,6 +590,7 @@
     "@types/vscode": "^1.116.0",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
+    "@vscode/codicons": "0.0.46-24",
     "@vscode/test-cli": "0.0.15",
     "@vscode/test-electron": "3.1.0",
     "eslint": "^10.2.1",

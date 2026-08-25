@@ -3,35 +3,19 @@ import { parseFromContent } from '../../../services/parser.service.js';
 import { patchBlockCode, type BlockRef } from '../../../services/artifact-patcher.service.js';
 import type { ParsedArtifactFile } from '../../../types/parsed-artifact.types.js';
 import { blockAsArtifact } from './preview.helpers.js';
-import { slugify } from '../../../services/filename.service.js';
+import { openScratchFile, disposeScratchFile } from '../../../services/scratch-file.service.js';
 import { extForLang, resolveLangId } from '../../../services/language-map.service.js';
 import { out } from './shared.js';
 
 /**
- * Deletes any leftover block-edit temp files from a previous session (e.g. after
- * a crash or non-clean teardown). Best-effort — errors are swallowed.
+ * Scratch subdirectory this controller owns, under the extension storage dir.
  *
- * @param storageUri - Extension storage dir (`context.storageUri ?? globalStorageUri`).
- * @returns A promise that resolves once the sweep completes.
- *
- * @example
- * await sweepBlockEditOrphans(context.storageUri ?? context.globalStorageUri);
+ * Exported so `extension.ts` sweeps it **by reference** rather than re-spelling
+ * the literal — the same rule `blockExpand.ts`'s `SCRATCH_SUBDIR` follows. Until
+ * Wave 2 this string existed in three places (twice here, once in the sweep).
  */
-export async function sweepBlockEditOrphans(storageUri: vscode.Uri): Promise<void> {
-    const dir = vscode.Uri.joinPath(storageUri, 'blockEdit');
-    try {
-        const entries = await vscode.workspace.fs.readDirectory(dir);
-        for (const [name] of entries) {
-            try { await vscode.workspace.fs.delete(vscode.Uri.joinPath(dir, name)); }
-            catch { /* ignore individual failures */ }
-        }
-        if (entries.length > 0) {
-            out.appendLine(`[blockEdit] swept ${entries.length} orphan temp file(s)`);
-        }
-    } catch {
-        /* dir does not exist yet — nothing to sweep */
-    }
-}
+export const BLOCK_EDIT_SUBDIR = 'blockEdit';
+
 
 /** Callback bag the controller uses to push state back to the preview owner. */
 export interface BlockEditCallbacks {
@@ -100,13 +84,33 @@ export class BlockEditController {
         const known  = await vscode.languages.getLanguages();
         const langId = resolveLangId(language, language, known);
         const ext    = extForLang(langId);
-        const base   = slugify(artifact.frontmatter.title || artifact.fileName) || 'block';
+        // The service REJECTS a name that slugs to empty, where this controller
+        // previously fell back to 'block'. Supply that fallback here rather than
+        // softening the service: rejection is the service's job, and a default
+        // title is this caller's.
+        const rawBase = artifact.frontmatter.title || artifact.fileName;
+        const base    = rawBase.trim().length > 0 ? rawBase : 'block';
 
-        // ── Write + open the temp file in extension storage ───────────────────
-        const dir     = vscode.Uri.joinPath(this.cb.storageUri, 'blockEdit');
-        await vscode.workspace.fs.createDirectory(dir);
-        const tempUri = vscode.Uri.joinPath(dir, `${base}.${ext}`);
-        await vscode.workspace.fs.writeFile(tempUri, new TextEncoder().encode(code));
+        // ── Write + open the temp file, through THE scratch-file authority ────
+        // Previously this hand-rolled joinPath + createDirectory + writeFile with
+        // no containment check at all. `openScratchFile` slugs, contains and
+        // writes in one place; `undefined` means the name was rejected.
+        const tempUri = await openScratchFile({
+            storageUri: this.cb.storageUri,
+            subdir:     BLOCK_EDIT_SUBDIR,
+            baseName:   base,
+            ext,
+            content:    code,
+        });
+        if (!tempUri) {
+            out.appendLine(`[blockEdit] rejected scratch name for "${base}" — not opening`);
+            return;
+        }
+        // Recorded BEFORE the editor is opened: if openTextDocument or
+        // showTextDocument throws, the file already exists on disk, and a
+        // tempUri assigned only afterwards would leave it untracked and
+        // undeletable by teardown.
+        this.tempUri = tempUri;
 
         const doc = await vscode.workspace.openTextDocument(tempUri);
         if (known.includes(langId)) {
@@ -116,7 +120,6 @@ export class BlockEditController {
         await vscode.window.showTextDocument(doc, { viewColumn: column, preview: false });
 
         // ── Record state + arm the save watcher ───────────────────────────────
-        this.tempUri   = tempUri;
         this.sourceUri = vscode.Uri.file(artifact.filePath);
         this.blockRef  = blockRef;
 
@@ -144,10 +147,7 @@ export class BlockEditController {
         this.tempUri   = undefined;
         this.sourceUri = undefined;
         this.blockRef  = undefined;
-        if (temp) {
-            try { await vscode.workspace.fs.delete(temp); }
-            catch { /* already gone — ignore */ }
-        }
+        if (temp) { await disposeScratchFile(temp); }
     }
 
     /**

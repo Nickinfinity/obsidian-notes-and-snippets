@@ -73,15 +73,30 @@ export async function writeArtifact(args: WriteArgs): Promise<WriteResult> {
         const baseDir = vscode.Uri.joinPath(args.vaultRoot, getEntry(args.type).dir);
         await vscode.workspace.fs.createDirectory(baseDir);
 
-        // ── 3. Collision check ─────────────────────────────────────────────
+        // ── 3. Path-escape guard, on the FINAL path ────────────────────────
+        // Step 1 contained the *directory*; this contains the *file*. They are
+        // not the same check: `fileName` is caller-supplied and unvalidated,
+        // and `Uri.joinPath` normalises `..`, so a name like `../../evil`
+        // resolves outside a `chosenDir` that step 1 already approved. Every
+        // caller today happens to guard upstream (`assertNoPathInjection`, or
+        // `safeRelPath`), but the writer is the authority and the rule belongs
+        // here — a `fileName` legitimately carrying a separator (`sub/b`, from
+        // the create-index batch) is what retires the old "it is a basename"
+        // assumption. Rejected, never trimmed. Guarded by
+        // `artifact-writer.test.ts` — "rejects a fileName that escapes chosenDir".
         const fileUri = vscode.Uri.joinPath(args.chosenDir, `${args.fileName}.md`);
+        if (!isWithinRoot(args.chosenDir, fileUri)) {
+            return { kind: 'error', message: `Filename "${args.fileName}" resolves outside the destination directory.` };
+        }
+
+        // ── 4. Collision check ─────────────────────────────────────────────
         const exists = await fileExists(fileUri);
 
         if (exists && !args.force) {
             return { kind: 'collision', filePath: fileUri.fsPath };
         }
 
-        // ── 4. Write ───────────────────────────────────────────────────────
+        // ── 5. Write ───────────────────────────────────────────────────────
         await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(args.content));
         return { kind: 'success', filePath: fileUri.fsPath };
 

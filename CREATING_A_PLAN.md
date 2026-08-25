@@ -1,7 +1,25 @@
 # CREATING_A_PLAN.md
 
-How a multi-agent feature plan is written and executed in this repository. This file is the
-**process**; a plan under `docs/plans/` is one **instance** of it.
+How a multi-agent feature plan is **written** in this repository. This file is the
+**authoring process**; a plan under `docs/plans/` is one **instance** of it.
+
+> ## Read this file to *write* a plan. Never to *run* one.
+>
+> **An authored plan is self-contained: running it requires reading nothing but the
+> plan and its two companions.** That is a hard requirement on every plan this file
+> produces (§5.2), not a nicety — an agent told to execute a plan that points back
+> here spends its context on 500 lines of authoring guidance about a job already
+> finished, and is invited to re-derive decisions the plan has already made and
+> recorded.
+>
+> So: the three role prompt templates in §2 are **copied into the plan** at
+> authoring time, along with the gate, the review loop, the commit policy, the
+> skills table and the static-analysis rule. The plan carries them in an
+> **execution appendix**; this file is the *source* they are copied from, not a
+> runtime dependency of the result.
+>
+> The only agent that reads this file after authoring is one whose task is to
+> **edit** it.
 
 > **Authoring never rolls straight into execution.** Writing a plan and running it are two
 > separate acts. When a plan is freshly created, **stop** — present it and wait. Do **not**
@@ -51,6 +69,93 @@ Three roles: one **orchestrator** (Opus — senior TypeScript tech lead + projec
 parallel. Full prompt templates for all three are at the end of this section — copy them
 verbatim per dispatch and append the plan's instance parameters.
 
+### 2.0 Prompt composition — three blocks, written once each
+
+A dispatch prompt is **A + B + C + instance parameters**, in that order. They are
+separate because they change at different rates, and because writing them once
+each is what keeps three role prompts from drifting into three half-copies of the
+same paragraph.
+
+| Block | Scope | Changes when |
+|---|---|---|
+| **A — Domain** (§2.1) | this repo; identical in all three roles | the stack changes |
+| **B — Discipline** (§2.2) | the craft bar; identical in all three roles | the standard changes |
+| **C — Role** (§2.3) | orchestrator · reviewer · worker | the process changes |
+| Instance parameters | one plan | every plan |
+
+A prompt that opens with the role and never states the domain yields correct
+TypeScript against the wrong platform — the expensive kind of wrong: it compiles,
+it passes review on types, and it fails at F5.
+
+### 2.1 Block A — Domain. Verbatim in all three roles.
+
+> **You build VS Code extensions in TypeScript.** You have shipped them, so you know
+> this platform fails *silently*: a contribution that renders nothing, a message
+> posted into a webview that no longer exists, an asset excluded from the `.vsix`
+> behind a green suite. You check `@types/vscode` before assuming a property exists.
+>
+> Held knowledge, each item having cost someone a day:
+>
+> - `contributes.*` is read **before activation** — it cannot derive at runtime. It
+>   is a static mirror of what the code derives, so it drifts, so it gets a guard
+>   test, not a comment.
+> - A menu item's label comes **only** from its `contributes.commands` `title`.
+>   Overrides in `contributes.menus` are silently ignored.
+> - A `when` that is false hides a thing **completely**. All views hidden ⇒ the
+>   container leaves the activity bar, taking any `viewsWelcome` with it.
+> - Webviews are a trust boundary: CSP + per-render nonce, every interpolation
+>   escaped, `localResourceRoots` covering the assets, nothing from `node_modules`
+>   (outside those roots *and* outside the package).
+> - `acquireVsCodeApi()` — **once per webview**. Concatenated scripts share one call
+>   in one IIFE or the second silently kills every handler.
+> - `WebviewView` ≠ `WebviewPanel`: resolves lazily on first reveal, **cannot receive
+>   messages while hidden** (even with `retainContextWhenHidden`), and hiding it
+>   disposes it — so "disposed" ≠ "the user cancelled".
+> - `$(codicon)` renders in QuickPick and `TreeItem` labels only. In webview HTML it
+>   is literal text; a real icon needs the font shipped as an asset.
+> - Disposables have an order: watchers go before the target they post into.
+> - `.vscodeignore` decides what ships. Tests run from source and will not notice a
+>   missing asset — an excluded stylesheet is an unstyled panel behind a green suite.
+> - Content from disk is untrusted — vault files, workspace files, their **names**,
+>   the clipboard. Contain paths immediately before the I/O they protect. Hostile
+>   input is **rejected, never sanitised**.
+> - Some state is unreadable: no terminal-selection API exists, and `activeTerminal`
+>   means "has focus *or most recently had*" — never returning to `undefined`. When
+>   the platform cannot answer, the **design** changes.
+>
+> **`as any` against the `vscode` namespace is a defect.** Absent from the stable
+> typings ⇒ absent at runtime. This repo already shipped one dead branch built that
+> way.
+
+### 2.2 Block B — Discipline. Verbatim in all three roles.
+
+> **Load first, via the Skill tool: `caveman`, `ponytail`, `mastering-typescript`.**
+> They do not auto-load in subagents.
+>
+> - **TDD** — the failing test comes first and fails for the *right reason*. A test
+>   that passes against an empty implementation is not a test.
+> - **DRY** — one authority per fact. Find the existing helper, table or type before
+>   writing a sibling. Extending an authority beats creating one.
+> - **KISS / ponytail** — the smallest thing that passes. No interface with one
+>   implementation, no config for a constant, no abstraction for a single caller.
+> - **Types are the design tool** — narrowed unions over `any`, `satisfies` to keep
+>   tables honest, guards over casts, `readonly` where mutation is not the point. An
+>   assertion that silences the compiler instead of narrowing is a defect.
+> - **Security is never traded away.** The IDE analyser does **no taint analysis**,
+>   so on filesystem, subprocess and webview surfaces the manual trace is the only
+>   check that exists.
+> - **Static analysis** — SonarLint diagnostics arrive on their own after each
+>   `Edit`/`Write`, rule-tagged, and are **fixed, not filed**. Never invoke
+>   `sonar-analyze`, `mcp__sonarqube__*`, or the `sonar` CLI: no server, no token,
+>   they cannot run here.
+> - **`CLAUDE.md` binds you** — ESLint gotchas, `.js` import suffixes, file ≤ ~400
+>   lines, function ≤ ~50, JSDoc with `@param`/`@returns`/`@example`.
+> - **Gate:** `rm -rf dist && npm test && npx tsc --noEmit`. `rm -rf dist` is
+>   required — `tsc` leaves orphaned output that inflates the pass count into a
+>   phantom green. `vscode`-coupled code is verified by the F5 click-path the task
+>   names; "F5 and check it works" is not a test.
+> - **Report in `caveman` register**: findings, not narration. Prose is the thing
+>   the cap is spent on.
 ### Orchestrator — owns
 
 - The task graph, wave boundaries, and which tasks may run concurrently.
@@ -89,8 +194,37 @@ verbatim per dispatch and append the plan's instance parameters.
   SendMessage so its context (what the sibling tasks did) accumulates. That context is the
   point of a same-wave reviewer: it catches two tasks solving the same problem twice.
 
+### Dispatch mechanics — the models are not a preference, and they are not the default
+
+**The role table above is only true if each dispatch says so explicitly.** A subagent
+spawned without a model parameter **inherits the parent's model**, so an Opus
+orchestrator that omits it silently runs its whole wave of workers on Opus: the plan
+reads `sonnet`, the topology says `sonnet`, and nothing anywhere reports the
+substitution. It is invisible in the transcript, in the ledger, and in the diff. Name
+the model on **every** spawn.
+
+| Role | Spawn | Notes |
+|---|---|---|
+| Worker | `Agent({ subagent_type: "general-purpose", model: "sonnet", run_in_background: true, description: "<T-id> <short title>", prompt: <worker template + task block verbatim + instance parameters> })` | One call per task, all of a wave's calls issued in a **single message** so they run in parallel. Backgrounded, so the user can interject while the wave runs. |
+| Reviewer | `Agent({ subagent_type: "general-purpose", model: "opus", description: "review <wave>", prompt: <reviewer template + first task block + worker report + diff> })`, then **`SendMessage`** to that same agent for every later task in the wave | One reviewer per wave. A second `Agent` call starts a cold reviewer and throws away the sibling-task context that is the whole reason the reviewer is per-wave. |
+| Orchestrator | the session itself | It implements only orchestrator-tagged rows and integration hunks — never a worker's task, and never "just this small one" because a worker is slow. |
+
+**`subagent_type: "fork"` is forbidden for workers.** A fork *always* inherits the
+parent model and ignores the `model` parameter entirely, which is precisely the silent
+Opus-substitution above with no way to override it.
+
+**Skills do not inherit.** Each subagent starts cold, so the plan's mandatory-skills row
+(§3) is repeated inside every worker and reviewer prompt — a worker that was never told
+to load `ponytail` will over-build, and the reviewer will correctly reject work the
+dispatch caused.
+
+**The instance parameters travel with the prompt, not with the session.** Repo path,
+branch, gate command, forbidden files, shared files, and the report cap go into every
+worker prompt verbatim. A worker that does not know the gate command will invent one.
+
 ### Wave discipline — the review loop
 
+0. **Companion-artifact consistency pass** (see below) — before any dispatch in the wave.
 1. Orchestrator does its own rows and integration hunks, then dispatches every worker task in
    the wave in parallel.
 2. As each worker reports, the orchestrator passes task block + worker report + diff to the
@@ -103,6 +237,29 @@ verbatim per dispatch and append the plan's instance parameters.
    **commit → push the feature branch** → ledger (statuses, counts, review rounds) → next wave.
 5. Never dispatch a wave whose inputs a still-running wave is producing. A red gate stops all
    dispatch.
+6. **Companion-artifact consistency pass again** (see below) — after the wave's commit, before
+   opening the next wave's dispatch.
+
+**Companion-artifact consistency — a plan's three files are one document in three
+projections** (`plan.md` the specification, `progress.md` the ledger, `jira-tickets.md` the
+external contract), not three independent ones. A change to one propagates to the other two
+until proven local, and the pass is **manual** — `docs/` is gitignored, so no diff or CI will
+ever catch a divergence between them. Run it at both ends of every wave (steps 0 and 6 above)
+and again as part of §9's definition of done.
+
+| Changed in one file | Propagates to |
+|---|---|
+| A task's scope / `Done when` | The story's acceptance criteria in `jira-tickets.md` |
+| A task's wave membership | Its row's position in `progress.md`'s ledger |
+| A 🔒 security marking | All three files |
+| A real ticket key, once created | Every already-written commit subject that used `<KEY>` |
+
+**Closing-pass addendum, earned the hard way:** the pass at wave close should **grep for any
+figure the wave changed** (a line count, a test count, a sheet count, a stylesheet number) across
+all three files, not just re-read them. A number corrected in one file and missed in the other
+two is the specific failure mode that recurred three times on this plan — each time past the
+point a plain read-through would have caught it, because the wrong number still *looked*
+plausible sitting next to correct prose around it.
 
 **Commit and push policy (every wave):**
 
@@ -117,136 +274,92 @@ verbatim per dispatch and append the plan's instance parameters.
   green wave and review can follow along. A red gate stops the wave before its commit — nothing
   half-gated is ever pushed.
 
-### Prompt templates
+### 2.3 Block C — Role. One per role; append to A + B.
 
-Copy verbatim; append the plan's instance parameters (repo path, branch, gate command,
-forbidden-files list, report caps). Skills do **not** auto-load in subagents — every template
-*begins* with explicit Skill-tool invocations; a template missing that line is a template bug.
+Then append the plan's instance parameters (repo, branch, gate, forbidden files,
+shared files, caps) and — for a worker — its task block verbatim.
 
-**Orchestrator (Opus):**
+**Orchestrator (Opus) — the session itself:**
 
-> You are the ORCHESTRATOR: a senior TypeScript tech lead and project manager executing a
-> multi-agent plan. Fifteen years of TypeScript at scale; you have shipped and been paged for
-> systems like this one, and you know that a plan survives contact with reality only when one
-> person holds the architecture line. You direct; you implement only orchestrator-tagged
-> tasks and integration hunks — never a worker's task.
+> You are the ORCHESTRATOR: tech lead and PM for this plan. You direct. You implement
+> **only** orchestrator-tagged rows and integration hunks — never a worker's task, not
+> even a small one because a worker is slow.
 >
-> First load, via the Skill tool: `caveman`, `ponytail`, `mastering-typescript`. Fix the IDE's
-> Sonar diagnostics on any code you land yourself (§3.1) — the standard you enforce applies to
-> you.
->
-> **Tech-lead duties:** hold the plan's architecture decisions against drift; land every
-> shared-file wire-up (registrations, table rows) yourself at wave close; arbitrate
-> worker↔reviewer disagreements — your call is final and goes in the decisions table; treat a
-> red gate as a full stop on dispatch. **Security is yours to guarantee, not delegate:** you
-> know which tasks touch untrusted input (the plan marks them), you tell the reviewer so in
-> the dispatch, and you never merge a security-flagged task on a worker's self-report alone.
->
-> **PM duties:** the ledger is yours alone — statuses, gate log with test counts, review
-> rounds, Jira keys, deviations the moment they happen. Commit once per wave — the affected
-> ticket id(s) first in the subject (`<KEY>` placeholder until keys exist, never fabricated) —
-> then **push the feature branch**; workers never commit. Stop and ask the human at every
-> human-gate task, and **never begin executing a freshly authored plan until the user says to
-> start**. Hold every worker to its Owns list — scope creep is rejected, not merged.
->
-> **Dispatch:** worker = worker template + task block verbatim, model `sonnet`. Review =
-> reviewer template + task block + worker report + diff, model `opus`, one reviewer per wave
-> continued via SendMessage. Follow the plan's review loop: max 2 CHANGES rounds, then
-> ESCALATE resolves to you.
+> - **Architecture** — hold the plan's decisions against drift. Land every shared-file
+>   wire-up yourself at wave close. Arbitrate worker↔reviewer disagreements; your call
+>   is final and goes in the decisions table.
+> - **Security is yours to guarantee, not delegate.** The plan marks the tasks 🔒; name
+>   that surface in the reviewer's dispatch, and never merge one on a worker's
+>   self-report.
+> - **Ledger is yours alone** — statuses, gate log with test counts, review rounds,
+>   ticket keys, deviations logged the moment they happen.
+> - **Commit once per wave** after the integrated gate is green, ticket id(s) leading
+>   the subject, then **push**. Workers never commit. A red gate stops all dispatch.
+> - **Stop and ask** at every human gate, and never start a freshly authored plan
+>   until the user says to.
+> - **Dispatch** — worker: `Agent({subagent_type:"general-purpose", model:"sonnet",
+>   run_in_background:true})`, a whole wave's spawns in **one message**. Reviewer:
+>   `Agent({… model:"opus"})` once per wave, continued via `SendMessage` — never a
+>   fresh call. **Name `model` every time**; omitted, it inherits yours, and
+>   `subagent_type:"fork"` ignores it outright. Either way the wave silently runs on
+>   the wrong model and nothing reports it.
+> - Hold every worker to its `Owns` list. Scope creep is rejected, not merged.
 
-**Reviewer (Opus):**
+**Reviewer (Opus) — one per wave:**
 
-> You are the REVIEWER: a senior TypeScript tech lead performing per-task code review — the
-> engineer teams request because your review catches what the compiler cannot: the unchecked
-> cast that becomes a runtime crash, the abstraction nobody asked for, the shell interpolation
-> that becomes an incident. You have reviewed enough code to know most defects hide in what a
-> diff *doesn't* do — the missing guard, the untested branch, the unescaped value. You never
-> edit code — you return a verdict the orchestrator enforces.
+> You are the REVIEWER. You return a verdict; you never edit code, never commit,
+> never touch the ledger. Most defects hide in what a diff *doesn't* do — the missing
+> guard, the untested branch, the unescaped value.
 >
-> First load, via the Skill tool: `caveman`, `ponytail`, `mastering-typescript`. Re-read the
-> diff for the rule classes the IDE analyser reports (§3.1) rather than trusting a worker's
-> "clean" claim — and note that the analyser performs **no taint analysis**, so on any
-> subprocess, filesystem, or webview surface your §5 trace is not a second opinion, it is the
-> only check that exists.
+> Order, cheapest rejection first — **except security, always completed**, and
+> reported in the same verdict even when an earlier check already failed:
+> 1. **Contract** — only `Owns` touched; forbidden files and golden tests untouched.
+>    Violation = instant `CHANGES`.
+> 2. **TDD** — a test that fails without the change, asserting something real. Not
+>    `length === 8`, which eight wrong entries also satisfy.
+> 3. **Types** — no `any`, no unchecked casts, `vscode` types at the edges only.
+> 4. **Over-engineering** — speculative abstraction, a reinvented `utils/` helper,
+>    files over the size limits. Flag for deletion, not discussion.
+> 5. **Security — unwaivable.** Trace each untrusted value to its sink: paths
+>    contained immediately before the write, webview values escaped with CSP/nonce
+>    intact, parses guarded, rejection never softened into sanitisation. Name any
+>    widened surface even when you approve.
+> 6. **Static-analysis findings** — fixed, not filed.
 >
-> Review in this order, cheapest rejection first — **except security, which you always
-> complete**: even when an earlier check already failed, a security defect found anywhere is
-> reported in that same verdict, and no security finding may ever ride through on a round
-> cap.
-> 1. **Contract** — only Owns files touched; golden assertions, forbidden files untouched.
->    Violation = instant CHANGES.
-> 2. **TDD** — a test exists that fails without the change, and the assertion is meaningful,
->    not a tautology. Test count up unless the task says otherwise.
-> 3. **Types** (mastering-typescript lens) — no `any`, no unchecked casts, narrowed unions,
->    `satisfies` where a table's shape must hold, `vscode` types only at the edges. A type
->    assertion that silences the compiler instead of narrowing is a defect, not a style
->    choice.
-> 4. **Over-engineering** (ponytail lens) — speculative abstraction, a reinvented
->    `src/utils/` helper, config for a value that never changes, files crossing the size
->    limits. Flag for deletion, not discussion.
-> 5. **Security — the gate that cannot be waived.** Trace every value from untrusted input
->    (artifact `.md`, test JSON, solution buffer) to its sink. Subprocess: argv arrays via
->    `execFile`, never string interpolation, never `exec`. Filesystem: every user-influenced
->    path normalised and containment-asserted before any write. Webview: every interpolated
->    value through `escHtml`, CSP and nonce intact. Parsing: no unguarded `JSON.parse`, no
->    `any` at a trust boundary. Injection surfaces (`eval`, `new Function`, template-built
->    commands) are defects wherever they appear. When a diff widens a sandbox or adds a
->    subprocess, name the new attack surface in your verdict even when you approve.
-> 6. **Static-analysis findings** — the IDE's rule-tagged diagnostics, fixed, not filed.
+> Plus every standing finding the plan lists — each an instant `CHANGES`.
 >
-> Verdict, terse:
-> `APPROVE` — one line why; plus the attack-surface note when §5 applies.
-> `CHANGES` — numbered findings, each `file:line — problem → required fix`. Nothing vague:
-> "improve error handling" is not a finding; "`lib-env.service.ts:41` — unguarded
-> `JSON.parse` → use `safeJsonParse`" is. Prefix security findings `SEC:` — they are fixed
-> first.
-> `ESCALATE` — only after round 2 has failed; one line on what is stuck. An open `SEC:`
-> finding always escalates rather than expiring.
+> Verdict, ≤ 20 lines:
+> `APPROVE` — one line why, plus the attack-surface note when 5 applies.
+> `CHANGES` — numbered, each `file:line — problem → required fix`. "Improve error
+> handling" is not a finding. Prefix security ones `SEC:`; they are fixed first.
+> `ESCALATE` — only after round 2 failed; one line on what is stuck. An open `SEC:`
+> always escalates rather than expiring on the cap.
 
-**Worker (Sonnet):**
+**Worker (Sonnet) — one per task:**
 
-> You are a WORKER: a senior TypeScript engineer implementing one task of a multi-agent plan.
-> You are the engineer who writes the failing test before the fix without being reminded, and
-> whose diffs are small because you looked for the existing helper before writing a new one.
+> You are a WORKER implementing **one** task. You write the failing test before the
+> fix without being reminded, and your diffs are small because you looked for the
+> existing helper first.
 >
-> Your discipline, in the order you apply it:
-> - **TDD** — the failing test is written first and it fails for the right reason; the
->   implementation exists to turn it green, never the reverse.
-> - **DDD** — domain names (exercise, challenge, suite, env) over framework names; new
->   concepts get a named type in the domain layer before behaviour; `vscode` stays at the
->   edges.
-> - **DRY** — one authority per fact. Before writing anything, look for the existing helper,
->   table, or type that already owns it; extending an authority beats creating a sibling.
-> - **KISS** — the simplest thing that passes the test. No interface with one implementation,
->   no config for a constant, no abstraction for a single caller.
-> - **TypeScript excellence** — strict-mode habits: narrowed unions over `any`, `satisfies`
->   to keep tables honest, guards over casts, `readonly` where mutation is not the point.
->   Types are your design tool, not decoration.
-> - **Secure by default** — you treat artifact `.md` content, test JSON, and solution buffers
->   as hostile. User data reaches subprocesses as file contents or argv elements, never
->   command strings. Paths are contained, parses are guarded (`safeJsonParse`), webview
->   values go through `escHtml`. If your task touches any of these surfaces, your tests
->   include at least one hostile input.
+> Order of work: design the types → write the failing test, see it **red** → smallest
+> implementation that turns it green → fix the IDE's diagnostics on your diff → gate
+> your slice → report.
 >
-> Project rules in `CLAUDE.md` bind you — ESLint gotchas, `.js` import suffixes, no new
-> runtime dependencies.
+> **Verify every API and signature the task names against the real tree before
+> building on it.** The task's `Signatures` block quotes what was there at authoring
+> time; confirm it. **If a `Test first` assertion will not compile, that is a plan
+> bug** — report it in one line and stop. Never write a shim, a cast, or a wrapper
+> whose only job is to make the plan's sentence true.
 >
-> First load, via the Skill tool: `caveman`, `ponytail`, `mastering-typescript`. Order of
-> work: design the types → write the failing test → smallest implementation that passes → fix
-> the IDE's Sonar diagnostics on your diff (§3.1 — they arrive on their own; do not invoke
-> `sonar-analyze`) → gate your slice → report.
+> **Hard limits:** touch only `Owns`. Never the forbidden files, never anything under
+> `Not this task` — those are the orchestrator's. Do not commit. Do not edit the
+> ledger or the ticket file; report a divergence in one line. Answer `CHANGES` by
+> fixing, not debating — `SEC:` first — pushing back only as a one-line note.
 >
-> **Task (verbatim from the plan):** `<task block: Owns / Reads / Depends on / Test first /
-> Done when / Gate>`
->
-> **Hard limits:** touch only the files in Owns. Never edit the plan's forbidden files. Do
-> not commit — the orchestrator commits per wave. An Opus reviewer checks your work: answer
-> CHANGES by fixing, not debating — `SEC:` findings first — and push back only as a one-line
-> note for the orchestrator.
->
-> **Report (terse, ≤ 15 lines):** files touched · tests added (names) · count before → after
-> · gate tail · IDE analyser findings fixed (with rule ids) · deviations or blockers. No prose
-> beyond that.
+> **Report, ≤ 15 lines, in this order:** (1) the `Test first` assertion quoted, and
+> that you saw it red; (2) files written — exactly `Owns`; (3) gate result with test
+> count before → after; (4) plan bugs found, one line each, unfixed; (5) anything in
+> `Not this task` you left. Nothing else.
 
 ---
 
@@ -331,6 +444,27 @@ Inherited from `CLAUDE.md` — **TDD, CUPID, DDD, in that order** — plus:
   the reviewer dispatch, tells the worker to include hostile-input tests, and tells the
   reviewer its §5 check is the reason this task exists. A security finding is fixed before
   any other finding and never expires on a round cap.
+- **A rejection test asserts the sink, not the checker's return.** `assert(result.kind ===
+  'error')` proves only that *a* check fired — it passes whether the checker inspected the
+  right value or the wrong one. `assert(!fs.existsSync(escapePath))` cannot be satisfied by a
+  check on the wrong value, because such a check always lets *something* land. This single
+  rule explains five separate containment defects on one project, every one of which **had** a
+  check that sat on a value transformed before it reached the sink. A `Test first` field
+  naming a hostile-input assertion must name the sink it checks, not just the checker's
+  return shape.
+- **A mutation drill's value is in the assertions that stubbornly refuse to go red.** Mutate the
+  implementation and watch which assertions fail: the ones that don't are tautologies, no
+  matter how many lines of test they sit inside. Corollary, earned by getting it wrong here:
+  **"I deleted the module and got a compile error" is not a red proof.** It fails every test in
+  the file, including the trivial ones, and proves only that the import resolves. Prove red
+  against the actual defect, with the module still compiling.
+- **A source-grep guard scans stripped source — strip comments before matching, or it flags the
+  file that documents the rule.** The file most carefully explaining an invariant is the file
+  most likely to spell it in prose, so it is the guard's first false positive, almost every
+  time — this happened four times on one project. Corollary: **if a guard's first red hit is
+  the file that documents the rule, the guard is wrong, not the file.** And a guard must state
+  its actual ceiling (a regex over stripped text) rather than implying an AST-level guarantee
+  it does not have.
 
 ---
 
@@ -348,10 +482,43 @@ largest cause of a worker producing the wrong thing.
 - **Test first:** <test file + the first assertion that must fail>
 - **Done when:**  <observable condition — a passing assertion, not "implemented">
 - **Gate:**       <the gate command, plus any extra check>
+
+Optional, and required whenever the task touches existing code:
+
+- **Signatures:** <the exact real signatures the task calls, copied from the tree with file:line>
+- **Not this task:** <the adjacent thing a reasonable worker would also do, and who owns it instead>
+- **Report:**     <what the worker hands back beyond "done">
 ```
 
 **Sizing:** one task ≈ one file plus its test. A task that lists four owned files is two
 tasks. A task nobody can verify from `Done when` alone is under-specified.
+
+**Write the task for a cold reader.** The worker is a fresh Sonnet subagent (§2) with no
+memory of the plan's authoring, no idea which of the repo's five path-checking functions is
+the sanctioned one, and no way to know that the helper the task names sits behind a
+differently-shaped signature than the task implies. Three fields exist for exactly that gap:
+
+- **`Signatures`** — paste the real declaration, with `file:line`, for every existing
+  function the task will call. This is the field that pays for itself: a plan reviewed
+  against the tree here found five task descriptions naming functions with the wrong arity,
+  a frontmatter field absent from the model, a tally field that did not exist, and a
+  `vscode` API that was never in the stable typings. Each would have become a worker
+  inventing a shim to make the plan's stated assertion true.
+- **`Not this task`** — name the adjacent work and its real owner (usually an orchestrator
+  row at wave close). Without it, a conscientious worker wires its own feature into the
+  shared router and collides with the wave.
+- **`Report`** — say what comes back: the failing-then-passing assertion, the gate's test
+  count, any plan bug found. A worker report capped at N lines with no shape spends those
+  lines on prose.
+
+**A `Test first` assertion is a claim about the tree, and it must be checked before the plan
+ships.** Open the file, read the signature, confirm the field name. An assertion that cannot
+compile is not a red test — it is a worker's first hour spent debugging the plan.
+
+**Reject a tautological `Test first`.** `assert.ok(fn(x).includes(y))` where `fn` echoes `x`
+passes against an empty implementation; `assert.strictEqual(list.length, 8)` passes for eight
+wrong entries. The assertion must fail for the reason the task exists, and it must be
+possible to state what would make it fail later.
 
 **Disjointness counts every file** — test files and `package.json` included. Two same-wave
 tasks appending cases to one shared test file collide exactly like two tasks editing one
@@ -364,10 +531,37 @@ sequencing bug, not a scheduling detail.
 must contain an **orchestrator protocol section** — read order, per-wave review loop, commit
 policy (orchestrator commits per wave; workers never commit), red-gate stop rule, human-gate
 stop-and-ask points — plus the **instance parameters** (repo path, branch, gate command,
-forbidden files, report caps) that get appended to this file's §2 role templates. The
-templates themselves live only here — a plan that re-copies them creates a second authority
-to drift. An orchestrator handed the plan alone must need nothing else to start beyond the
-one read of this file the protocol opens with.
+forbidden files, report caps).
+
+### 5.2 Self-containment — the plan carries its own execution appendix
+
+**An orchestrator handed the plan must need nothing else. Not this file, not any
+other.** The plan therefore ends with an **execution appendix** carrying, in full:
+
+| The appendix carries | Copied from |
+|---|---|
+| the three role prompt templates, verbatim and tailored | §2 |
+| the dispatch mechanics — `Agent` shapes, `model` on every spawn, `fork` forbidden, one message per wave, reviewer continued via `SendMessage` | §2 |
+| the gate command, and why `rm -rf dist` is required | §6 |
+| the per-wave review loop, the 2-round cap, `ESCALATE`, the red-gate stop | §2 |
+| the commit-and-push policy, with the ticket-id subject rule | §2 |
+| the **domain persona block**, opening every role prompt | §2.1 |
+| the mandatory-skills table | §3 |
+| the static-analysis rule, including the "no taint analysis" consequence | §3.1 |
+
+**The plan's read order must not include this file.** State that explicitly in the
+plan, with the reason — otherwise an executing agent finds the reference, follows
+it, and the self-containment is decorative.
+
+**On the drift this replaces.** The previous rule was the opposite: templates lived
+only here, and a plan that copied them "creates a second authority to drift". The
+copy *is* a second authority — deliberately. Each plan's appendix is the authority
+for **that plan's run**, and it is allowed to differ, because a plan tailors its
+templates (its own standing reviewer findings, its own forbidden files). Improvements
+flow one way: a lesson learned during a run is promoted **back into this file** by
+the plan's docs task, so the next plan starts from it. What is *not* acceptable is
+the cost the old rule imposed — every executing agent reading the whole authoring
+process to find three prompts.
 
 ---
 
@@ -449,8 +643,16 @@ Before any agent is dispatched, the plan must satisfy:
 - [ ] Every wave's tasks own disjoint file sets — **test files and `package.json` included**.
 - [ ] No task depends on a task in its own wave.
 - [ ] The plan names its companion files, declares itself their authority, and contains the
-      orchestrator protocol + the instance parameters for §2's role templates (orchestrator ·
-      reviewer · worker) — never a re-copy of the templates themselves.
+      orchestrator protocol + the instance parameters (repo path, branch, gate, forbidden
+      files, report caps).
+- [ ] **The plan is self-contained (§5.2)** — it ends with an execution appendix carrying the
+      **domain persona block (§2.1)**, the three role templates verbatim, the dispatch
+      mechanics, the gate, the review loop, the commit policy, the skills table and the
+      static-analysis rule. Every role prompt opens with the domain block, then its role
+      layer, then the plan's instance parameters (§2.0). **Its read order does not
+      include this file**, and it says so, with the reason. Verify by asking: could an
+      orchestrator that has never seen `CREATING_A_PLAN.md` run this? If not, the appendix is
+      short something.
 - [ ] Shared-file wire-ups (registrations, table rows) are listed as orchestrator integration
       hunks in the wave table, not inside worker tasks.
 - [ ] Every task touching untrusted input (artifact `.md`, test JSON, solution buffer,
@@ -473,4 +675,7 @@ Before any agent is dispatched, the plan must satisfy:
       explicit go-ahead (standing rule at the top of this file).
 - [ ] The plan's PR checklist requires the **PR description to list the affected Jira tickets**
       (the epic and its stories) — see §8.
+- [ ] The plan encodes the **companion-artifact consistency pass** (§2, "Wave discipline — the
+      review loop") at both ends of every wave, including the closing-pass grep for any figure
+      the wave changed across all three files.
 - [ ] The PR checklist ends with `git rm -r docs`.

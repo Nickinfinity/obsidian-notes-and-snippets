@@ -183,13 +183,29 @@
   border-radius: 4px;
   overflow: hidden;
   background-color: var(--vscode-editor-background);
+  /* Positioning context for the Expand button, which floats over the code area.
+     `.block-code` is the only home present on every path — a `hidden`
+     language-mode type (AIAgentsConfig) renders no language selector to sit
+     beside. The existing `overflow: hidden` keeps the button clipped to the box. */
+  position: relative;
+}
+
+/* Expand-to-editor button, floated top-right over the code area. Direct child
+   only: multi-block cards nest their own `.block-code`, and a descendant
+   selector would also catch those. */
+.block-code > .expand-editor-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
 }
 
 /* Block header buttons */
 
 .reorder-btn,
 .remove-block-btn,
-.expand-btn {
+.expand-btn,
+.expand-editor-btn {
   background: transparent;
   border: 1px solid var(--vscode-widget-border, #444);
   color: var(--vscode-foreground);
@@ -202,7 +218,8 @@
 
 .reorder-btn:hover:not(:disabled),
 .remove-block-btn:hover,
-.expand-btn:hover {
+.expand-btn:hover,
+.expand-editor-btn:hover {
   background-color: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.08));
 }
 

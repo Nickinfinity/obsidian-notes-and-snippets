@@ -41,7 +41,7 @@ suite('form client JS model shape ↔ ArtifactFormModel', () => {
 	// updated in the same change.
 	const MODEL_KEYS: readonly (keyof ArtifactFormModel)[] = [
 		'artifactType', 'title', 'description', 'tags',
-		'extension', 'provider', 'model', 'version', 'blocks',
+		'extension', 'target', 'provider', 'model', 'version', 'blocks',
 	];
 
 	test('every posted key is a real ArtifactFormModel field', () => {
@@ -57,6 +57,23 @@ suite('form client JS model shape ↔ ArtifactFormModel', () => {
 		const posted = modelKeysFromClientJs();
 		for (const key of ['artifactType', 'title', 'description', 'tags', 'blocks']) {
 			assert.ok(posted.includes(key), `extractModel() never posts required field "${key}"`);
+		}
+	});
+
+	test('every id in TYPE_FIELD_IDS is also posted by extractModel', () => {
+		// The two client-side lists are separate and neither compiles: TYPE_FIELD_IDS
+		// only wires the dirty-tracking listener, while the payload is built by
+		// extractModel's own readTypeField calls. Adding a key to one and not the
+		// other marks the form dirty and posts nothing — which is precisely what
+		// D6's `target` would have done, since an *optional* field's absence slips
+		// past both existing tests here.
+		const ids = /const TYPE_FIELD_IDS = \[([^\]]*)\]/.exec(FORM_CLIENT_JS);
+		assert.ok(ids, 'TYPE_FIELD_IDS not found in FORM_CLIENT_JS');
+		const listed = [...ids[1].matchAll(/'(\w+)'/g)].map(m => m[1]);
+		assert.ok(listed.length > 0, 'TYPE_FIELD_IDS parsed to an empty list');
+		const posted = modelKeysFromClientJs();
+		for (const id of listed) {
+			assert.ok(posted.includes(id), `TYPE_FIELD_IDS lists "${id}" but extractModel() never posts it`);
 		}
 	});
 

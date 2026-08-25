@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import { detectVaultDirs } from './vault.service.js';
 import { ARTIFACTS } from '../types/constants.js';
 import { getVaultPath } from './config.service.js';
+import { isInContext, getCreateTypesForSurface } from './artifact-type-config.service.js';
+import type { ArtifactContext } from '../types/artifact.types.js';
+import type { ArtifactType } from '../types/parsed-artifact.types.js';
 
 /** Prefix shared by all extension context keys — matches the VS Code settings namespace */
 const CTX = 'obsidian-artifacts';
@@ -24,14 +27,6 @@ export function artifactContextKey(dir: string): string {
 }
 
 /**
- * Returns true if an artifact belongs to the given VS Code context surface.
- * `'all'` in the artifact's `contexts` means it matches every surface.
- */
-function artifactInContext(contexts: readonly string[], surface: string): boolean {
-	return contexts.includes(surface) || contexts.includes('all');
-}
-
-/**
  * Sets all vault-related VS Code context keys based on the provided vault path.
  *
  * Keys are derived dynamically from `ARTIFACTS` — adding a new artifact to
@@ -43,6 +38,10 @@ function artifactInContext(contexts: readonly string[], surface: string): boolea
  * - `obsidian-artifacts.editorHasMultiple`          — true when ≥2 editor artifacts are active
  * - `obsidian-artifacts.terminalHasMultiple`        — true when ≥2 terminal artifacts are active
  * - `obsidian-artifacts.explorerHasMultiple`        — true when ≥2 explorer artifacts are active
+ * - `obsidian-artifacts.<surface>CreateHasMultiple` — true when ≥2 *create-capable*
+ *   artifacts are active on that surface. A separate family from the insert keys
+ *   above: a surface can offer one insert type and two create types, or the
+ *   reverse, so one key cannot serve both menus.
  *
  * The `*HasMultiple` keys drive the single-vs-submenu logic in package.json menus:
  * one active artifact → direct labelled entry, two or more → "Obsidian Artifacts" submenu.
@@ -61,6 +60,9 @@ async function setVaultContextKeys(vaultPath: string | null): Promise<void> {
 		await setCtx('editorHasMultiple',   false);
 		await setCtx('terminalHasMultiple', false);
 		await setCtx('explorerHasMultiple', false);
+		await setCtx('editorCreateHasMultiple',   false);
+		await setCtx('terminalCreateHasMultiple', false);
+		await setCtx('explorerCreateHasMultiple', false);
 		return;
 	}
 
@@ -74,12 +76,28 @@ async function setVaultContextKeys(vaultPath: string | null): Promise<void> {
 
 	// Count active artifacts per VS Code context surface.
 	// Used by package.json `when` clauses to choose between direct entries and submenus.
-	const countActive = (surface: string) =>
-		dirs.filter(d => artifactInContext(d.contexts as readonly string[], surface) && d.exists).length;
+	// `isInContext` (artifact-type-config.service.ts) is THE `'all'`-matching rule.
+	// This file carried a private copy until Wave 0 close; two bodies for one rule
+	// is the drift `package-menus.test.ts` would only catch after it had shipped.
+	const countActive = (surface: Exclude<ArtifactContext, 'all'>) =>
+		dirs.filter(d => isInContext(d.type, surface) && d.exists).length;
 
 	await setCtx('editorHasMultiple',   countActive('editor')   >= 2);
 	await setCtx('terminalHasMultiple', countActive('terminal') >= 2);
 	await setCtx('explorerHasMultiple', countActive('explorer') >= 2);
+
+	// Create menus collapse on the same rule as insert, but over a different
+	// population: create-capable types (createForm) rather than insert-capable
+	// ones. Derived from the same §2 rule via getCreateTypesForSurface, so a new
+	// createForm entry in ARTIFACTS reaches these keys with no edit here.
+	const countCreate = (surface: Exclude<ArtifactContext, 'all'>) => {
+		const createTypes: readonly ArtifactType[] = getCreateTypesForSurface(surface);
+		return dirs.filter(d => d.exists && createTypes.includes(d.type)).length;
+	};
+
+	await setCtx('editorCreateHasMultiple',   countCreate('editor')   >= 2);
+	await setCtx('terminalCreateHasMultiple', countCreate('terminal') >= 2);
+	await setCtx('explorerCreateHasMultiple', countCreate('explorer') >= 2);
 }
 
 /**
