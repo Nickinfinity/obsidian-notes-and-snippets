@@ -95,18 +95,14 @@ export type MainViewPreviewState =
  * own — swapping `webview.html` to this string is a full document reload,
  * so it never collides with `idle` mode's script from the previous render.
  *
- * ORCH-7 wires this into `mainView.provider.ts`'s `render()`, replacing its
- * `preview` branch — `renderPreviewPlaceholderHtml(cssUris, webview.cspSource)`
- * at `mainView.provider.ts:122` — with:
- * ```ts
- * renderMainViewPreviewHtml(this.previewState, cssUris, webview.cspSource, getNonce())
- * ```
- * `this.previewState: MainViewPreviewState` is a new field that call site
- * owns, defaulting to `{ kind: 'empty' }` and updated by whatever routes an
- * accepted artifact into the pane (navigator.ts, ORCH-7 row 2). Ending
- * preview (Cancel, or Insert for a non-batch artifact) is the same call
- * site's job too: `setMode('idle')` where the reused controller currently
- * calls the popup's `dispose()`.
+ * `MainViewProvider.render()` calls this for `preview` mode, passing its own
+ * `previewState` field (default `{ kind: 'empty' }`), the mode's stylesheet
+ * URIs and a fresh nonce. The provider is the **single writer** of
+ * `webview.html` for both modes; nothing else sets that property, so the two
+ * modes cannot race it.
+ *
+ * Ending a preview is `MainViewProvider.endPreview()`, which clears the state
+ * and returns the pane to `idle` — pinned by `test/main-view-integration.test.ts`.
  *
  * @param state     - What to show — `empty`, a single-block artifact, or a multi-block artifact.
  * @param cssUri    - Webview URIs for the shared stylesheets (`base.css` first).
