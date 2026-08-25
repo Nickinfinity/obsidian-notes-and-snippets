@@ -41,7 +41,7 @@ pnpm install           # Install deps (no node_modules by default — run after 
 npm run compile        # One-off TypeScript build (outputs to dist/)
 npm run watch          # Watch mode for development (preferred during active development)
 npm run lint           # ESLint check (runs against src/)
-npm run test           # Compile + lint + run all tests (754 passing)
+npm run test           # Compile + lint + run all tests (1130 passing)
 rm -rf dist && npm test # REQUIRED after any file delete or rename — see below
 npx tsc --noEmit       # Type-check only — IDE diagnostics can be stale; use this to verify
 ```
@@ -71,6 +71,12 @@ Press **F5** in VS Code to launch the Extension Development Host.
 - **Create form** — a webview form that writes new artifacts into the vault.
 - **Variable Sets** — reusable `<VK-xxx>` default bundles, applied with a diff
   preview or saved from current values.
+- **Activity-bar home** — a dedicated container (icon: `media/obsidian-artifacts.svg`,
+  freely replaceable — nothing reads or fingerprints it) holds two panes: the
+  **main pane**, a two-mode webview that lists create-form types (`idle`) and
+  hosts the insert preview (`preview`) once an artifact is picked; and the
+  **Variables pane**, a tree (file → sub-set → variable) with CRUD commands and
+  confirmations for editing `Variables/` files without leaving the sidebar.
 
 ---
 
@@ -83,7 +89,12 @@ src/
 │   ├── openSettings.command.ts       # Registers obsidian-artifacts.settings
 │   ├── insert.command.ts             # One insert command per artifact (loop over ARTIFACTS)
 │   ├── create.command.ts             # Create-artifact flow + editor-selection capture
-│   └── migrate.command.ts            # obsidian-artifacts.migrateFrontmatter — dry-run, then apply
+│   ├── migrate.command.ts            # obsidian-artifacts.migrateFrontmatter — dry-run, then apply
+│   ├── capture/                      # One CaptureFn per surface, vscode-free
+│   │   └── editor.capture.ts · terminal.capture.ts · explorer.capture.ts
+│   ├── create-prefill.helpers.ts     # THE prefill builders (pure)
+│   ├── create-from-surface.command.ts   # Derived create-command registration (mirrors insert.command.ts)
+│   └── variables.command.ts (+ .command.helpers · .confirm.helpers)  # Variables CRUD commands + confirmations
 ├── services/                         # Domain logic. Panels/commands stay thin wiring.
 │   ├── artifact-type-config.service.ts   # THE ARTIFACTS reader — getEntry, getAllTypes, getFormConfig…
 │   ├── config.service.ts                 # THE settings reader — CONFIG_SECTION, getVaultPath(RootUri)
@@ -101,34 +112,47 @@ src/
 │   ├── varset.service.ts                 # Scanner, score, extractSubSets, applyVarSet, buildVarSetModel
 │   ├── multi-index.service.ts            # THE index link syntax + safeRelPath — buildIndexPlan,
 │   │                                     # buildDestCandidates, applyCarryOver (vscode-free)
+│   ├── scratch-file.service.ts       # THE temp edit-file lifecycle (real files under extension storage)
+│   ├── create-index.service.ts       # N captured paths → sibling files + an index (pure)
+│   ├── variables-crud.service.ts · variables-writer.service.ts  # Variables mutation + whole-file .md writer
 │   └── preview-mode.service.ts · temp-document.service.ts
 ├── ui/
+│   ├── views/                        # The activity-bar surfaces (WebviewView-based, not TreeDataProvider)
+│   │   ├── mainView.provider.ts      # THE main pane — WebviewViewProvider, idle ⇄ preview modes
+│   │   ├── mainView.render.ts        # buildCreateItems · renderIdleHtml (pure)
+│   │   ├── mainView.preview.ts       # preview mode — reuses preview.render/preview.clientJs verbatim
+│   │   ├── variablesView.provider.ts # Variables tree (file → sub-set → var)
+│   │   └── createIndexRunner.ts      # Batch write of a create-flow-generated index
 │   ├── panels/
 │   │   ├── artifactPicker.panel.ts   # Re-export shim (back-compat for insert.command.ts)
 │   │   ├── artifactPicker/           # Parts table under Architecture. navigator · codeBlock ·
 │   │   │                             # preview(.render/.clientJs/.helpers/.createFile/.batch) ·
 │   │   │                             # blockEditor · fullEditor · varSetController · varSetDiff ·
-│   │   │                             # multiIndex(.dest) · webviewSnippets · shared
+│   │   │                             # multiIndex(.dest) · webviewHost · webviewSnippets · shared
 │   │   │                             # (+ *.helpers.ts siblings)
 │   │   ├── artifactForm/             # panel(.helpers) · form.html · form.blocks ·
-│   │   │                             # form.clientJs · form.helpers · shared
+│   │   │                             # form.clientJs · form.helpers · blockExpand · shared
 │   │   └── settings.panel.ts · varsetPicker.panel.ts · destFolderPicker.panel.ts
 │   ├── base.css                      # Global reset + bare h1/hr/button — EVERY panel links this
+│   ├── main-view.css                 # Narrow-pane layout overrides for the sidebar preview
+│   ├── codicon.css · codicon.ttf     # Vendored @vscode/codicons — see "One runtime dependency" below
 │   └── settings.css · picker.css · form.css · hljs.css · code-block.css · varset.css
 ├── types/
 │   ├── constants.ts                  # ARTIFACTS · LANG_ALIAS · LANG_FENCE · LANG_EXT
 │   ├── parsed-artifact.types.ts      # ArtifactType union, ParsedArtifactFile, ParsedBlock, ParsedVar
 │   ├── multi-index.types.ts          # IndexStep · IndexPlan · DestCandidate · CarryOver · BatchOutcome
-│   └── artifact.types.ts · artifact-form.types.ts · varset.types.ts · webview-messages.types.ts
+│   └── artifact.types.ts · artifact-form.types.ts (CaptureResult · CaptureFn) · varset.types.ts · webview-messages.types.ts
 ├── utils/
 │   ├── helpers.ts                    # getNonce() — CSPRNG-backed
 │   ├── html.ts                       # THE escHtml (& < > " ') + styleLinkTags
 │   └── path-containment.ts           # THE containment rule — isPathWithin(root, candidate)
 ├── features/ · providers/            # (empty) reserved
-test/                                 # 754 tests. fixtures/ + snapshots/
+media/obsidian-artifacts.svg          # Activity-bar container icon — replaceable, referenced by path only
+test/                                 # 1130 tests. fixtures/ + snapshots/
 ├── snapshots/varset/*.md             # Byte-exact var-set emission goldens — NEVER edit
 ├── snapshots/form-html/*.html        # Form-panel HTML snapshots
-└── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets
+└── drift guards: language-consistency · frontmatter-keys · constants · webview-snippets ·
+                  package-create-menus · create-path-dry
 ```
 
 ---
@@ -177,6 +201,11 @@ regression this list exists to prevent; each is held by a named guard test.
 | `artifactType` frontmatter key — single key, exact-case PascalCase, no legacy `type:` read (D1) | `parser.service.ts` — `applyFrontmatterField` / `VALID_TYPES`; `artifact-serializer.service.ts` — `FRONTMATTER_KEY_ORDER[0]` | `frontmatter-keys.test.ts` — "artifactType key — T1 migration" suite |
 | Path containment (`isPathWithin`) | `utils/path-containment.ts` — the **one** prefix-with-separator rule, previously spelled out three times | `path-containment.test.ts` — no other `src/` file may spell `endsWith(path.sep)` |
 | Create-form client-JS payload shape | `artifactForm/form.clientJs.ts` — `extractModel()` | `test/form-clientjs-model-shape.test.ts` — binds the webview's posted keys to `ArtifactFormModel`; added after the webview posted `type:` while the extension read `artifactType`, which compiled clean |
+| Create-surface derivation (which types get a create command, from where) | `artifact-type-config.service.ts` — `getCreateFormTypes()` | `package-create-menus.test.ts` — pins `package.json`'s create menus to the derivation |
+| Webview transport (queue-while-hidden, dispose≠cancel) | `artifactPicker/webviewHost.ts` — `WebviewHost` | `test/webview-host.test.ts` |
+| Temp edit files on disk | `services/scratch-file.service.ts` — `openScratchFile` | covered via `blockEditor.ts` callers |
+| Create-flow capture shape | `types/artifact-form.types.ts` — `CaptureResult` / `CaptureFn<T>` | — (no test names either symbol; enforced by the compiler only — every `commands/capture/*.ts` function is typed to return `CaptureResult \| undefined` (`captureTerminal` is async, so `Promise<…>` of it)) |
+| Variables `.md` mutation | `services/variables-crud.service.ts` + `variables-writer.service.ts` — through `serializeArtifact`, never a bespoke emitter | covered via `test/variables-*.test.ts` |
 
 **Context menus are driven by `constants.ts`, always.** An artifact's
 `contexts` field is the single source for *where* its command shows (editor /
@@ -262,6 +291,94 @@ test-pinned to it) · `popupShell` (`cssUri` takes one URI or an ordered array) 
 **Insert-time var resolution is three-tier:** user input → `v.defaultValue` →
 otherwise the `<VK-xxx>` token is left in the output literally.
 
+### The main pane (`src/ui/views/mainView.*.ts`)
+
+`MainViewProvider` (`mainView.provider.ts`) is a `vscode.WebviewViewProvider`
+registered against the activity-bar container, **not** a `TreeDataProvider` —
+one webview with two render modes, `idle` and `preview`, so the pane keeps its
+content across a mode switch instead of being torn down and rebuilt.
+
+- `idle` — `buildCreateItems()` / `renderIdleHtml()` (`mainView.render.ts`, both
+  pure) list one row per create-form-enabled `ArtifactType`, sourced from
+  `getCreateFormTypes()`. A row click posts `{ command: 'createType', type }`;
+  `resolveCreateCommandId` gates it against the same list the rows were built
+  from, so a type can never be clickable here without also being a valid
+  target — a per-type fact the pane needs is a new `artifact-type-config.service.ts`
+  field, never a branch in this file.
+- `preview` — `renderMainViewPreviewHtml()` (`mainView.preview.ts`) dispatches to
+  the **existing** `renderPreviewHtml` / `renderMultiBlockPreviewHtml` /
+  `renderPopupEmptyHtml` (`artifactPicker/preview.render.ts`) verbatim — no
+  second renderer, no second client script. This pane is now the **sole**
+  preview host: `createWebviewPanel` no longer appears anywhere under
+  `src/ui/panels/artifactPicker/`.
+
+Extension→pane transport goes through `WebviewHost` (`artifactPicker/webviewHost.ts`),
+a `vscode`-free wrapper unit-tested against a fake target. It exists because a
+`WebviewView` breaks assumptions a `WebviewPanel`-based popup could make for
+free — four constraints, each a named fact so the next person does not
+rediscover one through a silently dropped message:
+
+- **H1 — you cannot post to a hidden view, even with `retainContextWhenHidden`.**
+  The `@types/vscode` typings **contradict themselves** here: the generic
+  `Webview.postMessage` doc says a hidden webview with `retainContextWhenHidden`
+  still receives messages, but the doc inside `registerWebviewViewProvider`'s own
+  `webviewOptions` — the API this pane actually uses — says the opposite, adding
+  that such a view's scripts are suspended; `WebviewPanelOptions` documents the
+  same restriction for panels. The option-specific doc governs. This was
+  litigated once during review and the finding was withdrawn; do not re-open it.
+  `WebviewHost.post()` queues while hidden and flushes on visible, last-write-wins
+  per `command` (except `QUEUE_AS_EVENTS`, which queue in arrival order because
+  each is a distinct fact rather than a state snapshot). Guard: `test/webview-host.test.ts`.
+- **H2 — hiding a view disposes it, and disposed ≠ cancelled.** A `WebviewView`
+  fires `onDidDispose` on a mere sidebar hide, not only on a real end. `WebviewHost`
+  exposes `onDidDispose` (view instance gone) and `onTeardown` (the extension is
+  actually done with this host, via explicit `teardown()`) as separate events —
+  but **`onTeardown` currently has no subscriber anywhere, and `host.teardown()`
+  has no caller**; nothing wires the batch abort to it. The batch actually aborts
+  in `preview.ts`'s `dispose()` — `this.batch.settle({ kind: 'aborted' })` — reached
+  from cancel, insert, `handleCreateFile` and the navigator's hide/dispose path.
+  H2's conclusion still holds (a hide parks a run rather than cancelling it,
+  because `dispose()` is what a hide reaches, not a cancel-specific path), but
+  the mechanism is `dispose()`, not `onTeardown` — do not go instrument the
+  latter expecting it to fire. Guard: `test/webview-host.test.ts` (dispose vs
+  teardown as distinct events).
+- **H3 — `resolveWebviewView` fires lazily, on first reveal.** `executeCommand('<viewId>.focus')`
+  settles when the *reveal* completes, not when the provider callback runs, so
+  revealing and immediately posting is a race. `ensureView()` (`mainView.preview.ts`)
+  awaits `focus()` and then re-checks resolution, throwing rather than silently
+  posting into a view that never resolved. Guard: `test/main-view-integration.test.ts`.
+- **H4 — a sidebar pane is ~300px wide against an editor column's ~800px.**
+  `main-view.css` loads after `picker.css`/`code-block.css` and reflows the
+  preview to a single column; the code area wraps rather than widening the pane
+  (`.code-content` is `pre-wrap` + `break-all`, so the sheet carries no overflow
+  rule of its own by design — horizontal overflow is unreachable regardless of
+  width). Guards: `test/main-view-styles.test.ts` (sheet order) and
+  `test/main-view-css.test.ts` (layout rules).
+
+### Create form — three durable findings (`src/ui/panels/artifactForm/panel.ts`)
+
+- **`openArtifactFormPanel` is a prefill-aware singleton, not a plain reveal.**
+  A second call while a form is already open used to `reveal()` and drop the
+  incoming `opts` entirely, so a second capture silently reopened the *first*
+  capture's form. `decideFormPanelAction({ hasController, hasPrefill, isDirty })`
+  now picks one of four actions — `create` / `reveal` / `retarget` /
+  `confirm-then-retarget` — and a dirty open form with an incoming prefill goes
+  through a `{ modal: true }` confirm (`confirmThenRetarget`) whose Cancel or
+  Escape leaves the open form untouched. Every create-from-context path routes
+  through this one function, so the fix lives once.
+- **`target:` is a form field, not just a frontmatter key.** `ArtifactFormModel`
+  carries `target?: string`, rendered in `buildAgentFieldsSection` through the
+  shared `buildOptionalTextField` and collected client-side via `TYPE_FIELD_IDS`
+  — it belongs in the whole-file table above beside `extension:`, both typed-only
+  fields feeding `resolveOutputFileName`.
+- **Variables CRUD is a whole-file rewrite through `serializeArtifact`.**
+  `variables-writer.service.ts`'s `renderVariablesFile` is a thin, named wrapper
+  over the one `.md` emitter — no bespoke Variables serialization exists. Its
+  ceiling: a hand-formatted `vks` file is normalised to `serializeArtifact`'s
+  canonical emission (blank-line placement, frontmatter key order) on first
+  edit — accepted as a rare, low-stakes edge case, with a `patchVksBlock`
+  surgical-edit upgrade path named in the code if it ever bites.
+
 ### Parser service (`src/services/parser.service.ts`)
 
 Seven exports: `parseArtifactFile` (sync, reads from disk), `parseFromContent`
@@ -336,6 +453,14 @@ correct, no live state to read. `resolveInsertTarget(type, invocationSurface)`
 `contexts: ['terminal']` (`Command`) always resolves `'terminal'`; both
 contexts declared resolves to whichever surface invoked it; anything else
 (including `Variables`'s `['all']`) always resolves `'editor'`.
+
+**There is no terminal-selection API at all.** The sibling fact to the rule
+above: `TerminalShellIntegration` exposes `cwd` / `env` / `executeCommand`
+only — no `selection` property exists to read. `commands/capture/terminal.capture.ts`
+captures a terminal selection the only way VS Code allows: run
+`workbench.action.terminal.copySelection` (which writes the selection into the
+clipboard), read the clipboard, then restore whatever the user's clipboard held
+before — never clobbering it silently.
 
 **🔒 Terminal send — one paste, not a line of keystrokes.**
 `terminal.sendText(content, false)` suppresses only the *trailing* newline;
@@ -556,6 +681,14 @@ before any new dep.
 was already in `dependencies` — the same stale-invariant failure the Invariants
 section below is about. Corrected rather than left to mislead.)*
 
+**`@vscode/codicons` stays a devDependency on purpose.** It ships the icon font
+used by the main pane's create rows. Its assets are **vendored**, not loaded
+from `node_modules` at runtime: `src/ui/codicon.css` + `src/ui/codicon.ttf` are
+copies checked into `src/ui/`, which is what both `localResourceRoots`
+(`extensionUri/src/ui`) and `vsce --no-dependencies` can actually reach —
+`node_modules` is invisible to both. That is the count staying at one and not
+becoming two; do not "fix" it by moving `@vscode/codicons` to `dependencies`.
+
 **Packaging caveat.** `npx vsce ls` fails on this repo with `npm error
 ELSPROBLEMS`: `vsce` shells out to `npm list --production`, which cannot read
 pnpm's `node_modules` layout and walks `highlight.js`'s own devDependencies.
@@ -567,17 +700,29 @@ install or `--no-dependencies` with the dependency bundled another way.
 
 ## Interactive Preview Panel
 
-On Enter, the picker closes and the popup webview becomes the interaction
-surface: an editable code area (line numbers `contenteditable="false"`, hljs
-highlighting, `<VK-xxx>` spans), one `<input>` per token pre-filled from
-`vars:`, and **Insert** / **Edit .md** / **Cancel**.
+**This section describes the main pane's `preview` mode, not a popup.** There
+is no `ViewColumn.Beside` popup left in this codebase — `createWebviewPanel`
+does not appear anywhere under `src/ui/panels/artifactPicker/` any more. On
+Enter, the picker closes and the activity-bar main pane switches to `preview`
+mode (see **The main pane**, above) and becomes the interaction surface: an
+editable code area (line numbers `contenteditable="false"`, hljs highlighting,
+`<VK-xxx>` spans), one `<input>` per token pre-filled from `vars:`, and
+**Insert** / **Edit .md** / **Cancel**. The rendering and client script are the
+same `renderPreviewHtml` / `renderMultiBlockPreviewHtml` / `PREVIEW_CLIENT_JS`
+this section always described — only the host changed.
 
-**CSP requirement:** the popup is **always** created with `enableScripts: true`.
-Creating it once with `false` (e.g. after hovering a multi-block file) silently
-blocks every button handler with no error.
+**CSP requirement:** the pane's webview is **always** created with
+`enableScripts: true`. Creating it once with `false` (e.g. after hovering a
+multi-block file) silently blocks every button handler with no error.
 
-**Webview ↔ extension message protocol** (both the picker popup and the
-variable-set flow — one table, not two):
+**Webview ↔ extension message protocol** (`types/webview-messages.types.ts`'s
+shared vocabulary — the preview mode, the variable-set flow, and the create
+form's block-expand flow all speak it) **survives the relocation unchanged**,
+minus two rows that never existed in `src/` (`updateRows`, `switchMode` — a
+prior version of this doc invented them) and plus two that did exist but were
+missing from the table: `sectionSaved` (preview mode's inline title/description
+edit) and `blockUpdated` (create-form only — posted by `artifactForm/panel.ts`
+after its expanded block editor saves, not by the preview flow):
 
 | Direction | Command | Payload |
 |---|---|---|
@@ -587,10 +732,10 @@ variable-set flow — one table, not two):
 | webview → ext | `pickVarSet` / `saveAsVarSet` | `{ values: Record<string,string> }` |
 | webview → ext | `confirmApply` / `cancelApply` | — |
 | webview → ext | `clearVarSource` | `{ name: string }` |
-| ext → webview | `updateRows` | `{ html: string }` — re-rendered highlighted rows |
+| ext → webview | `sectionSaved` | `{ section: string, success: boolean }` — ack for a `saveSection` |
 | ext → webview | `updateVars` | `{ vars: ParsedVar[] }` |
-| ext → webview | `fileUpdated` | `{ code, vars }` — after `.md` save |
-| ext → webview | `switchMode` | `{ mode: 'preview' \| 'edit' }` |
+| ext → webview | `fileUpdated` | `{ artifact: SerializedArtifact }` — after `.md` save |
+| ext → webview | `blockUpdated` | `{ index: number, code: string }` — after the expanded block editor saves |
 | ext → webview | `showVarSetDiff` | `{ html: string, subSetName: string }` |
 | ext → webview | `varSetApplied` | `{ values, subSetName, varNames }` |
 | ext → webview | `varSetCancelled` | — |
@@ -713,12 +858,11 @@ Messages are in the single protocol table above.
 
 ## VS Code Extension Notes
 
-- `activationEvents: []` in `package.json` — the extension activates on every window open. Narrow this to specific command events once commands stabilise.
+- `package.json` declares `"activationEvents": ["onStartupFinished"]` — activation is already narrowed off "every window open"; it fires once, after VS Code finishes starting up, not eagerly during startup and not per-command. Nothing further to narrow here without a reason.
 - Compiled output goes to `dist/` and is **gitignored**. Run `npm run compile` after cloning.
-- `media/` ships in the packaged extension. `src/`, `test/`, and `dist/test/` are excluded via `.vscodeignore` — **except `!src/ui/*.css`**, which must stay a glob. The webviews load stylesheets from source, so a named exception silently ships a CSS-less extension when a sheet is added or renamed, and the suite stays green because tests run from source. Verify with `npx vsce ls --no-dependencies | grep css`, which must list all
-seven sheets. The `--no-dependencies` flag is not optional here — see the
+- `media/` ships in the packaged extension. `src/`, `test/`, and `dist/test/` are excluded via `.vscodeignore` — **except `!src/ui/*.css` and `!src/ui/*.ttf`**, both of which must stay globs. The webviews load stylesheets (and the vendored codicon font) from source, so a named per-file exception silently ships a CSS-less or font-less extension when an asset is added or renamed, and the suite stays green because tests run from source. Verify with `npx vsce ls --no-dependencies | grep -E 'src/ui/.*\.(css|ttf)'`, which must print **ten** matched lines (nine stylesheets + `codicon.ttf` — always cite the count together with this exact command; a bare number is ambiguous between the sheet count and the matched-line count). The `--no-dependencies` flag is not optional here — see the
 packaging caveat above; without it `vsce` exits non-zero and `grep` finds
-nothing, which reads exactly like a missing-CSS failure.
+nothing, which reads exactly like a missing-asset failure.
 - All imports use explicit `.js` extensions (e.g. `'./helpers.js'`) — required by `Node16` module resolution even for `.ts` source files.
 - Webview `localResourceRoots` is restricted to `extensionUri/src/ui` — all webview assets must live in `src/ui/`.
 
@@ -752,6 +896,17 @@ file. Stateless/pure → its `*.helpers.ts`. Service/cross-cutting →
 `src/services/`, never the panel. Only if all three are "no" with a reason does
 it go in the existing file. Notice a file crossed 400 lines while finishing a
 feature → propose the split in that PR, not later.
+
+**Files near the guideline today** (measured with `wc -l`, not guessed —
+re-measure before trusting these numbers on a later read): `commands/variables.command.ts`
+is already **over** at 462 — split before adding to it. Approaching the line:
+`commands/variables.command.helpers.ts` (362), `ui/views/mainView.provider.ts`
+(347), `commands/create-from-surface.command.ts` (329),
+`artifactPicker/webviewHost.ts` (327). Two pre-existing files grew past the
+guideline again while this branch reused them: `artifactPicker/navigator.ts`
+(445, gained the index-run branch) and `artifactPicker/preview.ts` (433, gained
+the `mainView` reuse wiring). None of these are mid-edit right now — this is a
+marker for whoever touches one next, not a todo.
 
 ### Invariants (each cost a real bug here)
 

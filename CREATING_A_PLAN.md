@@ -224,6 +224,7 @@ worker prompt verbatim. A worker that does not know the gate command will invent
 
 ### Wave discipline — the review loop
 
+0. **Companion-artifact consistency pass** (see below) — before any dispatch in the wave.
 1. Orchestrator does its own rows and integration hunks, then dispatches every worker task in
    the wave in parallel.
 2. As each worker reports, the orchestrator passes task block + worker report + diff to the
@@ -236,6 +237,29 @@ worker prompt verbatim. A worker that does not know the gate command will invent
    **commit → push the feature branch** → ledger (statuses, counts, review rounds) → next wave.
 5. Never dispatch a wave whose inputs a still-running wave is producing. A red gate stops all
    dispatch.
+6. **Companion-artifact consistency pass again** (see below) — after the wave's commit, before
+   opening the next wave's dispatch.
+
+**Companion-artifact consistency — a plan's three files are one document in three
+projections** (`plan.md` the specification, `progress.md` the ledger, `jira-tickets.md` the
+external contract), not three independent ones. A change to one propagates to the other two
+until proven local, and the pass is **manual** — `docs/` is gitignored, so no diff or CI will
+ever catch a divergence between them. Run it at both ends of every wave (steps 0 and 6 above)
+and again as part of §9's definition of done.
+
+| Changed in one file | Propagates to |
+|---|---|
+| A task's scope / `Done when` | The story's acceptance criteria in `jira-tickets.md` |
+| A task's wave membership | Its row's position in `progress.md`'s ledger |
+| A 🔒 security marking | All three files |
+| A real ticket key, once created | Every already-written commit subject that used `<KEY>` |
+
+**Closing-pass addendum, earned the hard way:** the pass at wave close should **grep for any
+figure the wave changed** (a line count, a test count, a sheet count, a stylesheet number) across
+all three files, not just re-read them. A number corrected in one file and missed in the other
+two is the specific failure mode that recurred three times on this plan — each time past the
+point a plain read-through would have caught it, because the wrong number still *looked*
+plausible sitting next to correct prose around it.
 
 **Commit and push policy (every wave):**
 
@@ -420,6 +444,27 @@ Inherited from `CLAUDE.md` — **TDD, CUPID, DDD, in that order** — plus:
   the reviewer dispatch, tells the worker to include hostile-input tests, and tells the
   reviewer its §5 check is the reason this task exists. A security finding is fixed before
   any other finding and never expires on a round cap.
+- **A rejection test asserts the sink, not the checker's return.** `assert(result.kind ===
+  'error')` proves only that *a* check fired — it passes whether the checker inspected the
+  right value or the wrong one. `assert(!fs.existsSync(escapePath))` cannot be satisfied by a
+  check on the wrong value, because such a check always lets *something* land. This single
+  rule explains five separate containment defects on one project, every one of which **had** a
+  check that sat on a value transformed before it reached the sink. A `Test first` field
+  naming a hostile-input assertion must name the sink it checks, not just the checker's
+  return shape.
+- **A mutation drill's value is in the assertions that stubbornly refuse to go red.** Mutate the
+  implementation and watch which assertions fail: the ones that don't are tautologies, no
+  matter how many lines of test they sit inside. Corollary, earned by getting it wrong here:
+  **"I deleted the module and got a compile error" is not a red proof.** It fails every test in
+  the file, including the trivial ones, and proves only that the import resolves. Prove red
+  against the actual defect, with the module still compiling.
+- **A source-grep guard scans stripped source — strip comments before matching, or it flags the
+  file that documents the rule.** The file most carefully explaining an invariant is the file
+  most likely to spell it in prose, so it is the guard's first false positive, almost every
+  time — this happened four times on one project. Corollary: **if a guard's first red hit is
+  the file that documents the rule, the guard is wrong, not the file.** And a guard must state
+  its actual ceiling (a regex over stripped text) rather than implying an AST-level guarantee
+  it does not have.
 
 ---
 
@@ -630,4 +675,7 @@ Before any agent is dispatched, the plan must satisfy:
       explicit go-ahead (standing rule at the top of this file).
 - [ ] The plan's PR checklist requires the **PR description to list the affected Jira tickets**
       (the epic and its stories) — see §8.
+- [ ] The plan encodes the **companion-artifact consistency pass** (§2, "Wave discipline — the
+      review loop") at both ends of every wave, including the closing-pass grep for any figure
+      the wave changed across all three files.
 - [ ] The PR checklist ends with `git rm -r docs`.
